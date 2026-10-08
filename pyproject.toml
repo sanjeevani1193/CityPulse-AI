@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "citypulse-ai"
+version = "0.1.0"
+description = "Urban mobility demand forecasting and AI analytics using NYC Citi Bike and weather data."
+readme = "README.md"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "duckdb>=1.1,<2",
+    "pandas>=2.2,<4",
+    "pyarrow>=18,<24",
+    "pytz>=2024.1", # DuckDB's Python TIMESTAMPTZ retrieval requires pytz.
+]
+
+[project.scripts]
+citypulse-etl = "citypulse_ai.etl.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+notebooks = ["jupyterlab>=4,<5", "ipykernel>=6,<8", "matplotlib>=3.9,<4"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["citypulse_ai*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "--import-mode=importlib -ra"

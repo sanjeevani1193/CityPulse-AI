@@ -218,3 +218,30 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# CityPulse local datasets and generated ETL artifacts
+/csv_files/
+/data/raw/
+.venv/
+.ipynb_checkpoints/
+*.duckdb
+*.duckdb.wal
+*.parquet
+/data/processed/
+/outputs/
+
+# Temporary files and local credentials
+.DS_Store
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+.env.*
+!.env.example
+.aws/
+.secrets/
+secrets.*
+credentials.*
+*.pem
+*.key
