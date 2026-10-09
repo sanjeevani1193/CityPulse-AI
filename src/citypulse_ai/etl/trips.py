@@ -1,13 +1,15 @@
 """CSV ingestion, deterministic row validation, and hourly ride-start counts."""
 
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 import re
 
 import pandas as pd
 
-from citypulse_ai.etl.schema import LOCAL_TIMEZONE, RAW_COLUMNS
+from citypulse_ai.etl.schema import (
+    LOCAL_TIMEZONE, RAW_COLUMNS, REQUIRED_VALUES, REVIEWED_STATION_IDS,
+    STATION_ID_PATTERN, STATION_NULL_MARKERS,
+)
 
 
 class SchemaError(ValueError):
@@ -20,10 +22,10 @@ class ValidationResult:
     rejected: pd.DataFrame
 
 
-def read_trips_csv(path: str | Path) -> pd.DataFrame:
+def read_trips_csv(path: str | Path, *, nrows: int | None = None) -> pd.DataFrame:
     """Read identifiers as strings, preserving leading zeros and literal 'NA'."""
     try:
-        raw = pd.read_csv(path, dtype="string", keep_default_na=False)
+        raw = pd.read_csv(path, dtype="string", keep_default_na=False, nrows=nrows)
     except pd.errors.EmptyDataError as exc:
         raise SchemaError("CSV has no header; required columns are missing") from exc
     missing = sorted(set(RAW_COLUMNS) - set(raw.columns))
@@ -32,15 +34,28 @@ def read_trips_csv(path: str | Path) -> pd.DataFrame:
     return raw.loc[:, list(RAW_COLUMNS)]
 
 
+def iter_trip_chunks(path: str | Path, chunk_size: int, max_rows: int | None = None):
+    """Read only the five ETL columns in bounded chunks, after a header check."""
+    read_trips_csv(path, nrows=0)
+    with pd.read_csv(
+        path, usecols=list(RAW_COLUMNS), dtype="string", keep_default_na=False,
+        chunksize=chunk_size, nrows=max_rows,
+    ) as reader:
+        for chunk in reader:
+            if not isinstance(chunk.index, pd.RangeIndex):
+                raise SchemaError("CSV records do not match the header field count")
+            yield chunk.loc[:, list(RAW_COLUMNS)]
+
+
 def _parse_timestamp(value: str) -> tuple[pd.Timestamp, str | None]:
     # Require an explicit date/time shape; do not accept inferred day/month formats.
     if not re.fullmatch(
-        r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?"
+        r"\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?"
         r"(?:Z|[+-]\d{2}:\d{2})?", value
     ):
         return pd.NaT, "invalid_timestamp"
     try:
-        stamp = pd.Timestamp(datetime.fromisoformat(value.replace("Z", "+00:00")))
+        stamp = pd.Timestamp(value)
         if stamp.tzinfo is None:
             stamp = stamp.tz_localize(LOCAL_TIMEZONE, ambiguous="NaT", nonexistent="NaT")
             if pd.isna(stamp):
@@ -53,9 +68,13 @@ def _parse_timestamp(value: str) -> tuple[pd.Timestamp, str | None]:
         return pd.NaT, "invalid_timestamp"
 
 
-def validate_trips(raw: pd.DataFrame) -> ValidationResult:
+def validate_trips(
+    raw: pd.DataFrame, *, duplicate_mask: pd.Series | None = None,
+) -> ValidationResult:
     """Reject invalid rows and all occurrences of duplicated, nonblank ride IDs.
 
+    A pipeline can supply globally computed duplicate flags for this batch.
+    Without them, duplicate checking is limited to the provided frame.
     Source row numbers include the header (first data record is row 2). Reasons
     are accumulated so no arbitrary duplicate survivor or timestamp is selected.
     """
@@ -64,12 +83,23 @@ def validate_trips(raw: pd.DataFrame) -> ValidationResult:
         raise SchemaError(f"Missing required columns: {', '.join(missing)}")
     cleaned = raw.loc[:, list(RAW_COLUMNS)].astype("string").fillna("")
     cleaned = cleaned.apply(lambda column: column.str.strip()).reset_index(drop=True)
-    duplicates = cleaned.ride_id.duplicated(keep=False) & cleaned.ride_id.ne("")
+    if duplicate_mask is not None and len(duplicate_mask) != len(cleaned):
+        raise ValueError("Duplicate mask must match the batch length")
+    duplicates = (
+        cleaned.ride_id.duplicated(keep=False) if duplicate_mask is None
+        else duplicate_mask.reset_index(drop=True).astype(bool)
+    ) & cleaned.ride_id.ne("")
     reasons: list[str] = []
     starts: list[pd.Timestamp] = []
     ends: list[pd.Timestamp] = []
     for index, row in cleaned.iterrows():
-        errors = [f"missing_{column}" for column in RAW_COLUMNS if not row[column]]
+        errors = [f"missing_{column}" for column in REQUIRED_VALUES if not row[column]]
+        station = row.start_station_id
+        if station and station not in REVIEWED_STATION_IDS and (
+            station.casefold() in STATION_NULL_MARKERS
+            or not re.fullmatch(STATION_ID_PATTERN, station)
+        ):
+            errors.append("invalid_start_station_id")
         if duplicates.iloc[index]:
             errors.append("duplicate_ride_id")
         parsed = []

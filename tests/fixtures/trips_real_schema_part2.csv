@@ -1,0 +1,4 @@
+ride_id,rideable_type,started_at,ended_at,start_station_name,start_station_id,end_station_name,end_station_id,start_lat,start_lng,end_lat,end_lng,member_casual
+c,classic_bike,2025-02-01 09:00:00.000000001,2025-02-01 09:15:00.500,Station A,0010.02,Station B,0011.00,40.7,-74.0,40.8,-74.1,member
+shared,classic_bike,2025-02-01 09:10:00.125,2025-02-01 09:20:00.125,Station A,0010.02,Station B,0011.00,40.7,-74.0,40.8,-74.1,member
+d,electric_bike,2025-02-01 08:55:00.500,2025-02-01 09:02:00.500,Station B,0011.00,,,40.8,-74.1,,,casual

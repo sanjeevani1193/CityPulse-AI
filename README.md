@@ -5,9 +5,11 @@ analytics platform built around NYC Citi Bike trip data and historical weather.
 The goal is to demonstrate an end-to-end workflow from validated source data to
 reproducible forecasts, interactive analytics, and statistical experimentation.
 
-Phase 0 and Phase 1.1 are implemented: a Python package scaffold and a local CSV
-trip ETL pipeline with validation, hourly counts, Parquet output, and a DuckDB
-table. Initial EDA in Jupyter includes saved ride counts, missing-value and
+**Phase 1 is complete:** data engineering, ETL, data-quality review, and initial EDA.
+Phase 0, Phase 1.1, and the Phase 1.3 real-data ETL adaptation are implemented:
+a Python scaffold and a chunked multi-file CSV pipeline with validation, global
+duplicate checks, hourly counts, Parquet output, and a DuckDB table.
+Initial EDA in Jupyter includes saved ride counts, missing-value and
 duration checks, and an hourly-demand visualization for February 2025. Raw data
 stays local; only synthetic fixtures are committed. Weather, forecasting, APIs,
 and deployment remain future work.
@@ -64,8 +66,10 @@ Kubernetes, and cloud hosting belong to later deployment phases.
     └── test_imports.py        # Package discovery and import smoke tests
 ```
 
-The ETL package contains the implemented trip pipeline; other subpackages remain
-placeholders. The `src/` layout separates importable code from repository files.
+The ETL package contains the implemented trip pipeline, and
+`features/reporting.py` prepares the reviewed February reporting dataset.
+The remaining subpackages are placeholders. The `src/` layout separates
+importable code from repository files.
 
 ## Local setup and tests
 
@@ -98,7 +102,7 @@ The unittest fallback runs only the scaffold smoke tests. Use pytest for the ETL
 tests, including synthetic DST cases, duplicate handling, Parquet/DuckDB outputs,
 and CLI behavior.
 
-## Trip ETL (Phase 1.1)
+## Trip ETL (Phases 1.1 and 1.3)
 
 ### Raw data contract and rejection policy
 
@@ -108,21 +112,46 @@ Literal strings such as `NA` remain identifiers rather than inferred nulls.
 
 | Column | Contract |
 | --- | --- |
-| `ride_id` | Required, nonblank trip identifier; unique within the input file |
+| `ride_id` | Required, nonblank trip identifier; unique across selected files |
 | `started_at` | Required ISO-8601 timestamp with seconds |
 | `ended_at` | Required ISO-8601 timestamp with seconds; later than the start |
-| `start_station_id` | Required, nonblank station identifier |
-| `end_station_id` | Required, nonblank station identifier |
+| `start_station_id` | Required, nonblank string with valid ID syntax |
+| `end_station_id` | Column required; blank values accepted for ride-start demand |
+
+The real February 2025 CSVs have 13 columns, including ride type, station names,
+coordinates, and membership type. The ETL reads only these five columns; it does
+not coerce decimal-looking IDs such as `3620.02` into floating-point numbers.
+Start IDs must contain alphanumeric segments optionally separated by `.`, `_`,
+or `-`. Whitespace is stripped. Blank IDs are missing; case-insensitive `NA`,
+`NaN`, `NULL`, `None`, `N/A`, and `<NA>` markers are invalid. This checks syntax,
+not membership in an authoritative station catalog. No four-digit numeric
+restriction is imposed, preserving leading zeros and alphanumeric IDs.
+
+The reviewed exception allowlist contains exactly **`6569.09_`**. February source
+data shows this ID as W 35 St & 9 Ave, approximately 33 metres from the location
+recorded for `6569.09`. This supports retaining its 43 otherwise-valid starts,
+but does not prove the IDs are identical. Preserve `6569.09_` as a distinct raw
+identifier; do not strip underscores or merge it with `6569.09`. Other malformed
+IDs remain rejected, and the exception does not bypass timestamp, duration,
+missing-value, or duplicate checks. Matching follows the existing whitespace
+cleanup, and the allowlist is recorded in each run's validation report.
+
+An end station is not needed to count where a trip started, so missing end IDs
+are accepted and counted in the report. A valid `ended_at` remains required to
+check elapsed duration. Positive rides over 24 hours are retained for now; an
+upper cutoff must be a documented domain decision, not inferred from EDA alone.
 
 Missing columns, a headerless file, or malformed CSV syntax fail the run. A
 header-only CSV succeeds and creates typed empty outputs. Rows with missing
 values, invalid timestamps, or nonpositive/unrepresentable durations are rejected.
 All occurrences of duplicate ride IDs are rejected, even when their other fields
 match or one occurrence has another error. Duplicate checking follows whitespace
-normalization and covers this input file only. Reasons accumulate per record.
+normalization and covers all selected rows across files and chunk boundaries.
+Reasons accumulate per record. Repeating the same input path is an error.
 No maximum plausible duration is imposed yet; that needs a domain decision.
 
-Rejected rows retain the original five values, a `source_row` record number
+Rejected rows retain the original five values, the absolute `source_file` path,
+and a per-file `source_row` record number
 (header is 1, first data record is 2), and semicolon-separated rejection reasons.
 Record numbers are logical CSV records, not physical lines for multiline fields.
 A completed run may contain rejected rows, including all rows, and exits zero;
@@ -131,8 +160,14 @@ inspect `report.json` for counts. Configuration/read failures exit nonzero.
 ### Timestamp and hourly-count policy
 
 - Accept `YYYY-MM-DD HH:MM:SS` or a `T` separator, optional fractional seconds
-  (up to six digits), and optional `Z` or numeric `±HH:MM` offset.
-- Interpret timestamps without an offset in **America/New_York**.
+  (up to nine digits, preserved at nanosecond precision), and optional `Z` or
+  numeric `±HH:MM` offset.
+- Interpret timestamps without an offset in **America/New_York**. The sampled
+  real CSVs contain no offsets. The official
+  [System Data page](https://citibikenyc.com/system-data) lists timestamp fields
+  but does not explicitly specify their time zone, so NYC local time remains a
+  documented assumption pending publisher confirmation. February 2025 uses
+  UTC−05:00 under this policy. Do not treat that assumption as verified metadata.
 - Reject ambiguous fall-back times and nonexistent spring-forward times without
   guessing, shifting, or inferring their UTC offset.
 - Accept timestamps with explicit offsets as identified instants. Offsets are
@@ -163,29 +198,172 @@ PYTHONPATH=src python -m citypulse_ai.etl.cli \
 python -m pytest
 ```
 
-The flow is **CSV → required-column check → normalize/validate rows → UTC hourly
+The flow is **CSV header checks → pandas chunks → temporary DuckDB staging →
+global duplicate-ID check → chunk validation → chunk hourly counts → final SQL
 aggregation → Parquet + DuckDB + audit outputs**. Functions are separated into
 `schema.py` (contract), `trips.py` (pure ingestion/validation/aggregation steps),
 `pipeline.py` (file persistence), and `cli.py` (argument handling).
 
-Each run writes four files in the selected output directory:
+Each run writes six data/report files in the selected output directory:
 
 | Output | Purpose |
 | --- | --- |
 | `hourly_rides.parquet` | Station IDs, timezone-aware UTC hour starts, ride counts |
-| `citypulse.duckdb` | Materialized `hourly_rides` table, independent of the Parquet file afterward |
+| `validated_trips.parquet` | Every accepted trip, UTC timestamps, raw station identifiers, duration, source provenance, and exact UTC nanosecond integers |
+| `citypulse.duckdb` | Materialized canonical `validated_trips` and `hourly_rides` tables, plus derived `february_2025_hourly_rides` view |
+| `february_2025_hourly_rides.parquet` | Observed station-hour counts inside the reviewed NYC February window |
 | `rejected_trips.csv` | Rejected source records and their validation reasons |
-| `report.json` | Input SHA-256/path, row counts, reason counts, timestamp policy, library versions |
+| `report.json` | Per-file hashes/counts, run counts, rejection reasons, validation/timezone policies, timezone-data hash, processing limits, library versions |
 
 Rerunning replaces these named files/table rather than appending trips. Other
 DuckDB tables are preserved. Use a separate directory for each source/run you
-want to retain. Writes across the four outputs are not atomic; after an I/O
+want to retain. Writes across the outputs are not atomic; after an I/O
 failure, rerun successfully before consuming them. Outputs are sorted by station
 and UTC hour. The report contains no run clock, allowing identical reports for
 the same input path/bytes and environment. Dependency versions are recorded,
-but the project does not yet lock dependencies or system time-zone data; preserve
-the environment for reproduction across machines. The pipeline reads one CSV
-into memory and does not yet support chunking or cross-file deduplication.
+but the project does not yet lock dependencies; preserve the environment for
+reproduction across machines. A hash of the local timezone data is recorded.
+
+Only a bounded pandas batch is validated at once (default 50,000 records).
+Temporary disk-backed DuckDB tables hold raw ETL columns, global duplicate IDs,
+and partial counts; final hourly rows are streamed to Parquet. This avoids a
+Python set of millions of IDs and avoids retaining all accepted/rejected rows.
+The default DuckDB working-memory limit is 512 MB with disk spill enabled;
+it is not a hard limit on total Python/process memory. Allow space on the system
+temporary filesystem for staging and spill. Validation uses a readable per-row
+timestamp parser, so a full-file run will take longer than a sample.
+
+Accepted trips are streamed to canonical Parquet while validating each batch;
+they are not collected into one pandas frame. The DuckDB trip table is copied
+from that artifact and does not depend on an external Parquet path. Parquet
+preserves nanosecond UTC timestamps. DuckDB `TIMESTAMPTZ` represents microseconds,
+so `started_at_utc_ns` and `ended_at_utc_ns` retain the exact original UTC instants
+in SQL too. The real February timestamps have millisecond precision and therefore
+are also represented exactly in the DuckDB timestamp columns.
+
+### Reviewed February reporting window
+
+Canonical tables retain every accepted trip/count, including January starts.
+`features/reporting.py` creates a separate view and Parquet dataset with this
+half-open **America/New_York** ride-start window:
+
+```sql
+SELECT * FROM hourly_rides
+WHERE hour_start >= TIMESTAMPTZ '2025-02-01 00:00:00 America/New_York'
+  AND hour_start <  TIMESTAMPTZ '2025-03-01 00:00:00 America/New_York';
+```
+
+Both boundaries are specified with their zone, independently of the DuckDB
+session timezone. For this month they correspond to February 1 05:00 UTC
+inclusive and March 1 05:00 UTC exclusive. The view preserves UTC hour values.
+Since the boundaries align with full hours, filtering canonical hourly counts
+is equivalent to filtering ride starts before aggregation. No zero-filling,
+feature generation, or model training is performed.
+
+The quality review found 273 genuine January 31 raw starts, all ending February 1;
+their NYC-to-UTC-to-NYC timestamps round-trip exactly. They belong in canonical
+data but not the February ride-start reporting window. Original data and previous
+ETL outputs remain intact. Reprocess all three files together into a new directory:
+
+```bash
+source .venv/bin/activate
+PYTHONPATH=src python -m citypulse_ai.etl.cli \
+  --input csv_files/202502-citibike-tripdata_1.csv \
+          csv_files/202502-citibike-tripdata_2.csv \
+          csv_files/202502-citibike-tripdata_3.csv \
+  --chunk-size 50000 --memory-limit 512MB \
+  --output-dir outputs/phase13-february-reviewed
+```
+
+Query the canonical and derived counts separately:
+
+```sql
+SELECT COUNT(*) FROM validated_trips;
+SELECT SUM(ride_count) FROM hourly_rides;
+SELECT SUM(ride_count) FROM february_2025_hourly_rides;
+```
+
+### Reviewed full-run results
+
+The combined reviewed run processed all three raw files into
+`outputs/phase13-february-reviewed/`, with 50,000-row chunks, a 512 MB DuckDB
+staging limit, and no sample limit. It finished successfully in **345.20 seconds
+(5 minutes 45 seconds)** with an empty error log.
+
+| Verification | Actual result |
+| --- | ---: |
+| Input records | 2,031,257 |
+| Canonical accepted trips | 2,030,542 |
+| Rejected records | 715 |
+| Missing start-station IDs | 673 |
+| Other invalid start-station IDs | 42 |
+| Duplicate ride IDs | 0 |
+| Canonical station-hour rows | 598,855 |
+| Canonical sum of ride counts | 2,030,542 |
+| February station-hour rows | 598,630 |
+| February ride starts | **2,030,269** |
+| January 31 trips retained in canonical storage, excluded from the view | 273 |
+
+Input equals accepted plus rejected, and canonical hourly counts equal the
+canonical trip count. Both canonical and February hourly datasets have no
+duplicate station-hour keys and match their Parquet exports exactly. The raw
+IDs remain separate: `6569.09` has 1,354 accepted starts and `6569.09_` has 43.
+No source timestamps changed; the SQL timestamp columns match their exact UTC
+nanosecond integers for every real accepted trip. Source CSV hashes and all
+22 snapshotted previous-output/notebook files were unchanged.
+
+All **56 automated tests passed in 5.50 seconds** before reprocessing. Regression
+tests cover the exact reviewed ID, rejection of other malformed IDs, duration
+checks despite the exception, January/February/March boundaries, UTC boundary
+instants, session-timezone independence, nanosecond preservation, empty outputs,
+and count conservation. The new run's `report.json`, `verification.json`,
+`run_summary.json`, and logs retain the measured results. Historical outputs
+remain available; their older rejection counts describe the earlier policy.
+
+The February data is now ready for a separate station-coverage and missing-hour
+policy step. Do not interpret absent rows as zero demand yet. Weather integration,
+forecasting features, temporal splits, and models remain later work.
+
+### Verify a bounded real-data run first
+
+```bash
+source .venv/bin/activate
+PYTHONPATH=src python -m citypulse_ai.etl.cli \
+  --input csv_files/202502-citibike-tripdata_1.csv \
+  --max-rows-per-file 10000 --chunk-size 2000 \
+  --output-dir outputs/phase13-sample
+```
+
+This limits validation to the first 10,000 rows of that file. Hashing still reads
+the entire source file as a byte stream to record provenance. Duplicate results
+cover only selected rows; they do not prove uniqueness in the rest of the file
+or across unselected files. `report.json` records the limit explicitly.
+
+The initial Phase 1.3 sample run, before the reviewed exception, read **10,000 rows**, accepted **9,995**, and
+rejected **5** for missing start-station IDs. It accepted **26** rows with blank
+end-station IDs and produced **9,590** observed station/hour bins. No duplicate
+IDs were found within the sample. These are sample results, not monthly totals.
+
+After inspecting the sample audit and checking count conservation, run the first
+complete CSV in a separate output directory:
+
+```bash
+PYTHONPATH=src python -m citypulse_ai.etl.cli \
+  --input csv_files/202502-citibike-tripdata_1.csv \
+  --chunk-size 50000 --output-dir outputs/phase13-first-file
+```
+
+The API and CLI accept multiple paths in one run, e.g. `--input part1.csv
+part2.csv part3.csv`. Inputs are sorted by resolved path for deterministic audits.
+One combined run checks IDs across all files; three separate runs do not.
+Reruns replace outputs rather than accumulate prior runs. No missing station/hour
+bins are zero-filled.
+
+Run these commands from the project root. `PYTHONPATH=src` explicitly imports
+the current working-tree package; it also works if the local editable
+installation is not being discovered by Python. The existing `.venv` has all
+required dependencies, but its editable package path was not discovered during
+this verification, so the real-data commands above use this explicit source path.
 
 ### Query the warehouse
 
@@ -219,8 +397,9 @@ conventions against this contract. Decide how to handle stationless rides and
 whether end-station IDs must remain mandatory; define plausible duration bounds
 and acceptable rejection thresholds. Choose the source period and provenance
 records, confirm usage terms, and review the rejection audit on a sample. For
-multiple monthly files, add cross-file duplicate handling, incremental ingestion,
-and memory sizing/chunking. Define station coverage and zero-fill policies before
+multiple monthly files, verify global duplicates and output row-count accounting,
+measure memory/disk usage on the first file, and plan incremental ingestion.
+Define station coverage and zero-fill policies before
 turning these observed counts into a forecasting dataset. Resolve ambiguous local
 timestamps only with authoritative source information.
 
@@ -276,16 +455,20 @@ ETL counts.
 
 Next, review missing station values and long-duration trips with the mentor,
 decide rejection and station/hour coverage policies, and reconcile exploratory
-counts with the ETL before creating forecasting features. Cross-file
-deduplication and incremental ingestion remain future ETL work.
+counts with the ETL before creating forecasting features. Phase 1.3 now supports
+cross-file duplicate checks; incremental ingestion remains future ETL work.
 
 ## Phased roadmap
 
 1. **Scaffold (complete):** package layout, dependency metadata, agent guidance,
    documentation, and import smoke tests.
-2. **ETL and warehouse (in progress):** Phase 1.1 trip ingestion, validation, UTC
-   hourly counts, Parquet, DuckDB, CLI, and fixture tests are complete. Next add
-   real-data readiness controls, then weather ingestion and aligned data contracts.
+2. **Phase 1 — data engineering, ETL, data quality, and initial EDA (complete):**
+   Phase 1.1 initial ETL and Phase 1.3 real
+   schema adaptation, chunked multi-file ingestion, global duplicate checks,
+   Parquet/DuckDB output, and fixture tests are complete. Complete-file and
+   combined-file runs were verified, and reporting-window/station-ID decisions
+   now have regression tests and a separate derived reporting dataset.
+   Weather ingestion and aligned data contracts follow later.
 3. **Features and baseline evaluation:** build calendar/weather features, temporal
    splits, seasonal-naive forecasts, and reproducible backtesting metrics.
 4. **Deep learning:** add PyTorch and TensorFlow forecasting models and compare
@@ -301,5 +484,8 @@ deduplication and incremental ingestion remain future ETL work.
 9. **Deployment:** containerize, add CI/CD, then introduce Kubernetes and cloud
    infrastructure as requirements justify them.
 
-The next implementation should address the real-data readiness decisions above
-using the locally acquired data. Weather integration belongs to a subsequent phase.
+Resume with **Phase 2.1: station coverage and missing-hour policy** for the reviewed
+February dataset. Decide when an absent station-hour means zero demand versus
+unknown/unavailable coverage before creating a complete forecasting grid. No
+zero-filling has been performed yet. Feature generation, temporal splits,
+weather integration, and model training remain subsequent work.

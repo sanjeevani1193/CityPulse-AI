@@ -222,6 +222,9 @@ __marimo__/
 # CityPulse local datasets and generated ETL artifacts
 /csv_files/
 /data/raw/
+*.csv
+*.csv.gz
+!tests/fixtures/*.csv
 .venv/
 .ipynb_checkpoints/
 *.duckdb

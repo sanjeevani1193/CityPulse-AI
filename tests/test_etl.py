@@ -47,11 +47,11 @@ def test_missing_columns_fail_before_output(column, tmp_path):
 
 def test_invalid_rows_have_audit_reasons():
     result = validate_trips(read_trips_csv(FIXTURES / "trips_invalid.csv"))
-    assert result.valid.empty
-    assert result.rejected.source_row.tolist() == list(range(2, 11))
+    assert result.valid.ride_id.tolist() == ["no-end"]
+    assert result.rejected.source_row.tolist() == [2, 3, 4, 5, 6, 8, 9, 10]
     assert result.rejected.rejection_reasons.tolist() == [
         "missing_ride_id", "started_at:invalid_timestamp", "nonpositive_duration",
-        "nonpositive_duration", "missing_start_station_id", "missing_end_station_id",
+        "nonpositive_duration", "missing_start_station_id",
         "missing_started_at", "duplicate_ride_id", "duplicate_ride_id",
     ]
 
@@ -99,10 +99,9 @@ def test_whitespace_and_missing_values():
     raw.loc[1, "start_station_id"] = "  "
     raw.loc[2, "ended_at"] = pd.NA
     result = validate_trips(raw)
-    assert result.valid.ride_id.tolist() == ["r1", "r4"]
-    assert result.valid.start_station_id.iloc[0] == "NA"
+    assert result.valid.ride_id.tolist() == ["r4"]
     assert result.rejected.rejection_reasons.tolist() == [
-        "missing_start_station_id", "missing_ended_at"
+        "invalid_start_station_id", "missing_start_station_id", "missing_ended_at"
     ]
 
 
@@ -148,16 +147,21 @@ def test_outputs_and_reproducible_rerun(tmp_path):
         assert pd.Timestamp(hours[0][0]) == pd.Timestamp("2024-01-15T13:00:00Z")
 
 
-@pytest.mark.parametrize("fixture", ["trips_empty.csv", "trips_invalid.csv"])
-def test_empty_and_all_rejected_inputs_produce_typed_outputs(fixture, tmp_path):
-    report = run_pipeline(FIXTURES / fixture, tmp_path)
+@pytest.mark.parametrize("all_rejected", [False, True])
+def test_empty_and_all_rejected_inputs_produce_typed_outputs(all_rejected, tmp_path):
+    source = FIXTURES / "trips_empty.csv"
+    if all_rejected:
+        source = tmp_path / "all_rejected.csv"
+        raw = read_trips_csv(FIXTURES / "trips_invalid.csv")
+        raw.loc[raw.ride_id.ne("no-end")].to_csv(source, index=False)
+    report = run_pipeline(source, tmp_path / "outputs", chunk_size=2)
     assert report["accepted_rows"] == report["hourly_rows"] == 0
     assert report["input_rows"] == report["rejected_rows"]
-    frame = pd.read_parquet(tmp_path / "hourly_rides.parquet")
+    frame = pd.read_parquet(tmp_path / "outputs" / "hourly_rides.parquet")
     assert frame.empty
     assert str(frame.hour_start.dtype) == "datetime64[ns, UTC]"
     assert str(frame.ride_count.dtype) == "int64"
-    with duckdb.connect(str(tmp_path / "citypulse.duckdb")) as connection:
+    with duckdb.connect(str(tmp_path / "outputs" / "citypulse.duckdb")) as connection:
         assert connection.execute("SELECT COUNT(*) FROM hourly_rides").fetchone() == (0,)
 
 
