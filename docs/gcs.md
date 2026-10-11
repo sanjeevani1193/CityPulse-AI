@@ -161,3 +161,17 @@ full suite passed **158 tests plus 6 subtests**. These measured cloud results ar
 from the completed publication, not a cloud request made during the Git checkpoint.
 Repeating the example upload would fail its no-overwrite precondition; use the
 read-only verification example when checking the already published artifact.
+
+## Historical ingestion integration
+
+The historical CLI now has an explicit `--cloud-publish` stage and a
+`--publish-existing-only` mode for already processed source partitions. It reuses
+this wrapper and the publisher's verification helpers; it does not change the
+single-artifact command's fixed size limit or overwrite behavior.
+
+See [Phase 2.2D commands and recovery policy](historical_ingestion.md#phase-22d--optional-gcs-publication-after-etl)
+for one-month processing, publishing without ETL, retry behavior, size ceilings,
+and local manifest status inspection. The historical manifest records verified
+object generations; downloads pin both the blob generation and the matching
+precondition. Reconciliation and canonical snapshot publication remain separate.
+This phase performs no real cloud transfers during tests.

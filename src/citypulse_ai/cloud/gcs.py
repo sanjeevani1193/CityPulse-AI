@@ -6,6 +6,7 @@ files. Install the optional dependency with ``pip install -e '.[cloud]'``.
 """
 
 import hashlib
+import math
 from pathlib import Path
 import re
 
@@ -39,7 +40,10 @@ class GCSStorage:
     SHA-256 must come from a trusted source (e.g. ``upload_file``'s return value).
     """
 
-    def __init__(self, project: str, bucket: str, *, client=None):
+    def __init__(self, project: str, bucket: str, *, client=None, upload_timeout: float = 600):
+        if not math.isfinite(upload_timeout) or upload_timeout <= 0:
+            raise ValueError("Upload timeout must be finite and positive.")
+        self.upload_timeout = upload_timeout
         if not project.strip() or not bucket.strip():
             raise ValueError("Project and bucket names must be nonempty.")
         self.bucket_name = bucket
@@ -81,13 +85,13 @@ class GCSStorage:
                     blob.metadata = {**metadata, "sha256": digest.hexdigest()}
                 blob.upload_from_file(
                     stream, if_generation_match=0, checksum=None,
-                    timeout=60, retry=None,
+                    timeout=self.upload_timeout, retry=None,
                 )
             return digest.hexdigest()
         except (GoogleAPIError, GoogleAuthError, RequestException, OSError) as exc:
             raise GCSOperationError(
                 f"Upload failed for gs://{self.bucket_name}/{object_name} "
-                f"({type(exc).__name__}); existing objects are not overwritten."
+                f"({type(exc).__name__}: {exc}); existing objects are not overwritten."
             ) from exc
 
     def object_metadata(self, object_name: str) -> dict[str, str]:
@@ -99,6 +103,19 @@ class GCSStorage:
         except (GoogleAPIError, GoogleAuthError, RequestException) as exc:
             raise GCSOperationError(
                 f"Metadata read failed for gs://{self.bucket_name}/{object_name} "
+                f"({type(exc).__name__})."
+            ) from exc
+
+    def object_info(self, object_name: str) -> dict:
+        """Read the current generation, byte size, and custom provenance."""
+        blob = self._blob(object_name)
+        try:
+            blob.reload(timeout=60, retry=None)
+            return {"generation": str(blob.generation), "size_bytes": blob.size,
+                    "metadata": dict(blob.metadata or {})}
+        except (GoogleAPIError, GoogleAuthError, RequestException) as exc:
+            raise GCSOperationError(
+                f"Object inspection failed for gs://{self.bucket_name}/{object_name} "
                 f"({type(exc).__name__})."
             ) from exc
 
@@ -115,6 +132,7 @@ class GCSStorage:
 
     def download_file(
         self, object_name: str, local_path: str | Path, *, expected_sha256: str,
+        generation: int | None = None,
     ) -> Path:
         """Download to a new file and check SHA-256; retain failures for inspection.
 
@@ -124,10 +142,16 @@ class GCSStorage:
         if not re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha256):
             raise ValueError("Expected SHA-256 must contain exactly 64 hexadecimal characters.")
         blob = self._blob(object_name)
+        conditions = {}
+        if generation is not None:
+            if generation <= 0:
+                raise ValueError("GCS generation must be positive.")
+            blob = self.bucket.blob(object_name, generation=generation)
+            conditions["if_generation_match"] = generation
         path = Path(local_path)
         try:
             with path.open("xb") as stream:
-                blob.download_to_file(stream, checksum=None, timeout=60, retry=None)
+                blob.download_to_file(stream, checksum=None, timeout=60, retry=None, **conditions)
             actual = sha256_file(path)
         except FileExistsError:
             raise

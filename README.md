@@ -771,3 +771,17 @@ The completed implementation passed **158 automated tests plus 6 subtests**.
 Raw data, generated outputs/publication receipts, virtual environments, and ADC
 credentials remain outside the Git checkpoint. No forecasting models, weather
 integration, or deployment were added.
+
+### Phase 2.2D — historical source publication
+
+The historical CLI now supports explicit `--cloud-publish` and
+`--publish-existing-only` modes. Local ETL completion and cloud publication have
+separate manifest states. Source-month artifacts use hash-based revisions;
+generation-pinned verification and per-file checkpoints support safe retries
+without overwrites or deletions. Full source publication remains distinct from
+complete ride-start-month coverage and canonical snapshot construction.
+See [one-month commands, recovery, and status inspection](docs/historical_ingestion.md#phase-22d--optional-gcs-publication-after-etl).
+The implementation passed **187 tests plus 6 subtests** using offline unit and
+synthetic integration tests; no real-month uploads, downloads, or ETL runs were
+performed in this phase. A real-month upload requires separate authorization and
+an explicit file-size ceiling large enough for its validated-trip Parquet.

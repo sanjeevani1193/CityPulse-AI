@@ -53,7 +53,7 @@ def test_upload_sends_exact_bytes_and_prevents_overwrite(gcs, tmp_path):
     assert store.upload_file(path, 'smoke/test.txt') == hashlib.sha256(data).hexdigest()
     assert captured == [data]
     assert blob.upload_from_file.call_args.kwargs == {
-        'if_generation_match': 0, 'checksum': None, 'timeout': 60, 'retry': None,
+        'if_generation_match': 0, 'checksum': None, 'timeout': 600, 'retry': None,
     }
     blob.delete.assert_not_called()
 
@@ -179,3 +179,62 @@ def test_object_metadata_permission_error_is_clear(gcs):
     blob.reload.side_effect = Forbidden('denied')
     with pytest.raises(GCSOperationError, match='Metadata read failed'):
         store.object_metadata('target')
+
+
+def test_object_info_records_generation_size_and_metadata(gcs):
+    store, blob = gcs
+    blob.generation = 1234567890123456
+    blob.size = 36
+    blob.metadata = {'sha256': 'digest'}
+    assert store.object_info('target') == {
+        'generation': '1234567890123456', 'size_bytes': 36, 'metadata': {'sha256': 'digest'},
+    }
+    blob.reload.assert_called_once_with(timeout=60, retry=None)
+    blob.delete.assert_not_called()
+
+
+def test_generation_pinned_download(gcs, tmp_path):
+    store, blob = gcs
+    data = b'old generation'
+    blob.download_to_file.side_effect = lambda stream, **kwargs: stream.write(data)
+    store.download_file('target', tmp_path / 'copy', expected_sha256=hashlib.sha256(data).hexdigest(), generation=42)
+    store.bucket.blob.assert_called_with('target', generation=42)
+    assert blob.download_to_file.call_args.kwargs['if_generation_match'] == 42
+    blob.delete.assert_not_called()
+
+
+def test_object_info_network_error_is_clear(gcs):
+    store, blob = gcs
+    blob.reload.side_effect = ConnectionError('offline')
+    with pytest.raises(GCSOperationError, match='Object inspection failed'):
+        store.object_info('target')
+
+
+@pytest.mark.parametrize('generation', [0, -1])
+def test_invalid_download_generation_never_creates_file(gcs, tmp_path, generation):
+    store, blob = gcs
+    target = tmp_path / 'copy'
+    with pytest.raises(ValueError, match='positive'):
+        store.download_file('target', target, expected_sha256='0' * 64, generation=generation)
+    assert not target.exists()
+    blob.download_to_file.assert_not_called()
+
+
+def test_configurable_upload_timeout_preserves_precondition(tmp_path):
+    client = Mock()
+    store = GCSStorage('project', 'bucket', client=client, upload_timeout=123)
+    source = tmp_path / 'source'
+    source.write_text('tiny')
+    store.upload_file(source, 'target')
+    kwargs = client.bucket.return_value.blob.return_value.upload_from_file.call_args.kwargs
+    assert kwargs['timeout'] == 123
+    assert kwargs['if_generation_match'] == 0
+    assert kwargs['retry'] is None
+
+
+@pytest.mark.parametrize('timeout', [0, -1, float('inf'), float('nan')])
+def test_invalid_upload_timeout_never_initializes_adc(timeout):
+    with patch('citypulse_ai.cloud.gcs.storage.Client') as client:
+        with pytest.raises(ValueError, match='timeout'):
+            GCSStorage('project', 'bucket', upload_timeout=timeout)
+        client.assert_not_called()

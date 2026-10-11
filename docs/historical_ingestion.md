@@ -338,3 +338,166 @@ no raw ETL or downloads ran, and no historical catalogue snapshot was published.
 At the end of Phase 2.2B, real cross-archive counts and boundary reconciliation
 were still unverified. The subsequent Phase 2.2C results are recorded in
 [Actual pilot verification](#actual-pilot-verification) above.
+
+## Phase 2.2D — optional GCS publication after ETL
+
+Cloud publication is **opt-in** and uses the existing `cloud` extra and ADC.
+Local-only historical commands retain their existing behavior and do not import
+cloud modules or require GCP configuration. The validated Phase 1 rules are
+unchanged. This phase was verified with synthetic partitions and mocked cloud
+operations only; no real-month publication ran during implementation.
+
+The CLI calls `cloud/historical.py` after a full monthly job succeeds (or its
+verified local result is skipped). It uses the existing GCS wrapper and publisher's
+checksum/Parquet verification helpers. `--publish-existing-only` bypasses ingestion
+completely, and refuses missing, sampled, or changed partitions. All selected
+files are checked against the source manifest before any cloud requests.
+
+Published files are the registered `.parquet` outputs, JSON processing/validation
+reports, and `rejected_trips.csv`. DuckDB databases, logs, raw CSVs, ZIPs, source
+manifests, and temporary files are excluded. Every selected file must fit the
+explicit per-file ceiling; default **under 100 MiB**. A full-trip Parquet from
+these pilots exceeds that default, so a separately authorized real-month upload
+needs an explicitly reviewed higher limit. The single-artifact `citypulse-publish`
+CLI still retains its original fixed under-100-MiB limit.
+
+Object names preserve **source archive month**, not supposed complete ride-start
+month coverage:
+
+```text
+gs://<bucket>/<prefix>/source_archive_month=YYYY-MM/revision=<SHA-256>/filename
+```
+
+The revision hashes the project/bucket/prefix, selected file hashes, source archive
+provenance, and reviewed NYC local start-month counts. Metadata records those
+month counts, source URL, known archive hash (or explicitly unavailable status),
+file SHA-256, and revision. No boundary trips are reassigned or aggregated here;
+original Parquet bytes, exact identifiers, UTC precision, and embedded metadata
+remain unchanged. These objects are processed **source archive partitions**, not
+canonical start-month snapshots or proof of complete calendar-month coverage.
+
+### Commands for a separately authorized run
+
+Do not run these examples merely to inspect publication status. The following
+would process **one** month locally and then publish only after success. Normal
+source checks skip verified existing ETL results; an unprocessed month may download
+its official source, so that operation needs separate authorization:
+
+```sh
+PYTHONPATH=src .venv/bin/python -m citypulse_ai.etl.historical_cli \
+  --month 2025-02 --chunk-size 50000 --memory-limit 512MB \
+  --cloud-publish --cloud-project citypulse-ai-511315 \
+  --cloud-bucket citypulse-ai-511315-data \
+  --cloud-prefix curated/historical --cloud-max-file-mib 256
+```
+
+To publish a **registered, already processed** month without downloads or ETL,
+use this mode. Repeating it resumes an interrupted cloud publication:
+
+```sh
+PYTHONPATH=src .venv/bin/python -m citypulse_ai.etl.historical_cli \
+  --month 2025-02 --publish-existing-only \
+  --cloud-publish --cloud-project citypulse-ai-511315 \
+  --cloud-bucket citypulse-ai-511315-data \
+  --cloud-prefix curated/historical --cloud-max-file-mib 256
+```
+
+The ceiling of 256 MiB is a deliberate example for the existing February trip
+artifact, not a new default or approval to upload it now. Check local disk space
+for retained verification downloads before authorizing an upload. All downloads,
+including failed/partial ones, are retained; retries may consume additional disk.
+A publishing attempt can also incur GCS storage/network costs. No bucket, ACL,
+IAM policy, or other cloud resource is created or changed by the command.
+
+### Manifest state and retry semantics
+
+`archives[month].status` continues to describe **local ETL**, normally `processed`.
+`archives[month].cloud_publication.status` separately reports `pending`,
+`publishing`, `interrupted`, `failed`, or `published`. Each file records its cloud
+path, SHA-256, verified GCS generation, size, verification status, checks, and
+retained download path. The partition is `published` only after **every** selected
+file verifies. Inspect the local manifest without network access:
+
+```sh
+.venv/bin/python - <<'PY'
+import json
+from pathlib import Path
+manifest = json.loads(Path('outputs/historical/manifest.json').read_text())
+print(json.dumps(manifest['archives']['2025-02'].get('cloud_publication'), indent=2))
+PY
+```
+
+Identity and per-file progress are saved atomically **before** cloud writes, under
+the existing CLI single-writer lock. A hard kill can leave `publishing`; the same
+command recovers that state. A failed upload response may mean the object reached
+GCS: retry first inspects the stable object name. It is reused only if provenance,
+size, and a generation-pinned SHA-256 download match. Parquet copies must also have
+matching row counts and schemas. Previously verified files are rechecked on resume
+without reuploading; a missing or different verified generation fails explicitly.
+The current generation and metadata are checked again after download.
+
+Uploads always use the existing generation-zero precondition. An unrelated object
+at the same path is a collision, even if some metadata or bytes happen to match;
+it is neither overwritten nor deleted. A source/destination change also fails
+instead of abandoning or rewriting an existing publication record. Investigate
+collisions and mismatches before retrying. Upload failure does not erase local
+ETL success or successful earlier file verifications. Application-level retries
+restart unfinished transfers; there is no persisted SDK resumable-upload session
+or unsafe byte-offset append. Interrupted local downloads use a new temporary
+location, preserving the earlier one.
+
+Unit/synthetic integration checks:
+
+```sh
+.venv/bin/python -m pytest tests/test_historical_cloud.py tests/test_gcs.py \
+  tests/test_gcs_publish.py tests/test_historical_ingestion.py -q
+```
+
+Actual Phase 2.2D full-suite result: **187 tests passed, plus 6 subtests**, including
+29 new cases for publication success, upload/verification failures, interrupted
+response recovery, partial-file progress, metadata collisions, generation changes,
+manifest integrity, boundary provenance, size preflight, and local-only behavior.
+All cloud operations in these tests were mocked; synthetic ETL used only tiny
+test fixtures. The real January/February/March partitions were not reprocessed,
+their manifests were not updated, and no real cloud publication was attempted.
+
+### Large-file upload timeout and bounded retries
+
+Historical publication uses a configurable **600-second per HTTP upload request**
+timeout (`--cloud-upload-timeout 600`). `--cloud-upload-attempts 3` caps creation
+attempts; allowed values are 1–5. Transient connection/timeouts, HTTP 429 and
+server errors use exponential backoff of 1, 2, 4, then 8 seconds. Permission,
+checksum, and provenance failures are not retried. SDK retries remain disabled
+so there is only one retry loop. This is not a whole-command runtime deadline.
+
+Every creation still uses `if_generation_match=0`. After a transient failure or
+precondition race, an existing object must pass provenance, size, generation-pinned
+download SHA-256, and (for Parquet) schema/row-count verification. Existing verified
+artifacts are never uploaded again. The manifest records upload attempts and elapsed
+upload time (including backoff), even on failure; local ETL status is unaffected.
+For January's existing partition, resume with:
+
+```sh
+.venv/bin/python -m citypulse_ai.etl.historical_cli --month 2024-01 \
+  --output-root outputs/historical --publish-existing-only --cloud-publish \
+  --cloud-project citypulse-ai-511315 --cloud-bucket citypulse-ai-511315-data \
+  --cloud-max-file-mib 256 --cloud-upload-timeout 600 --cloud-upload-attempts 3
+```
+
+The original January failure was `requests.exceptions.ConnectionError` caused by
+`TimeoutError('The write operation timed out')` with a 60-second upload timeout.
+No source Parquet or ETL rules were changed for this fix.
+
+Actual controlled January retry: only `validated_trips.parquet` was uploaded
+(140,485,338 bytes), in one attempt taking **61.11 seconds**. Publication and
+verification took **69.80 seconds** (72.88 seconds including preflight). The
+local and generation-pinned downloaded SHA-256 matched:
+`580fda7e395a4a4db694a8bdd255a0aa6c3bc2d9c25d4243f53a4ca4c0b730de`.
+Parquet row count (1,886,925) and schema matched. Generation
+`1791737985778170` is recorded in the existing revision's manifest. All seven
+required artifacts verified before January was marked `published`; the six
+previous generations, source artifacts, other monthly manifest entries, and
+February cloud artifact remained unchanged. Reconciliation remains
+1,888,085 = 1,886,925 accepted + 1,160 rejected. The full automated suite for
+this fix passed **202 tests and 6 subtests** in 10.10 seconds; cloud tests were
+mocked. No ETL or source archive download was run.

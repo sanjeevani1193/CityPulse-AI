@@ -7,10 +7,13 @@ import json
 from pathlib import Path
 import sys
 import tempfile
+import time
 from urllib.parse import urlsplit
 
 import pyarrow as pa
 import pyarrow.parquet as pq
+from google.api_core.exceptions import TooManyRequests, ServerError, PreconditionFailed
+from requests.exceptions import ConnectionError, Timeout
 
 from citypulse_ai.cloud.gcs import GCSOperationError, GCSStorage, sha256_file
 
@@ -50,6 +53,85 @@ def verify_parquet(original: Path, downloaded: Path) -> dict:
     if not all(checks.values()):
         raise GCSOperationError(f"Parquet verification failed: {checks}; download retained at {downloaded}.")
     return checks
+
+
+def publish_verified_artifact(
+    source: Path, object_name: str, *, store: GCSStorage,
+    metadata: dict[str, str], max_bytes: int = MAX_ARTIFACT_BYTES,
+    expected_generation: str | None = None,
+    on_inspected=None,
+    upload_attempts: int = 3,
+) -> dict:
+    """Create or safely recover one immutable object, then verify its generation.
+
+    Unlike the one-shot CLI, a historical retry may find an object from a prior
+    interrupted upload. Matching metadata alone is insufficient: download and
+    verify its bytes before returning a successful receipt. Never overwrite it.
+    """
+    if not 1 <= upload_attempts <= 5:
+        raise ValueError("Upload attempts must be between 1 and 5.")
+    if max_bytes <= 0 or source.stat().st_size >= max_bytes:
+        raise ValueError(f"Artifact must be under {max_bytes} bytes: {source}")
+    expected = metadata["sha256"]
+    if sha256_file(source) != expected:
+        raise GCSOperationError(f"Source hash changed before publication: {source}")
+    attempts = 0
+    elapsed = 0.0
+    if not store.object_exists(object_name):
+        if expected_generation is not None:
+            raise GCSOperationError(f"Previously verified object is missing: {object_name}")
+        for attempt in range(upload_attempts):
+            attempts += 1
+            started = time.monotonic()
+            try:
+                measured = store.upload_file(source, object_name, metadata=metadata)
+            except GCSOperationError as exc:
+                # No nested SDK retry loop: each attempt is create-only. A lost
+                # response may mean creation succeeded; verify that object below.
+                cause = exc.__cause__
+                recoverable = isinstance(cause, (ConnectionError, Timeout, TimeoutError,
+                                                 TooManyRequests, ServerError, PreconditionFailed))
+                if not recoverable:
+                    raise
+                if store.object_exists(object_name):
+                    break
+                if isinstance(cause, PreconditionFailed) or attempts == upload_attempts:
+                    raise
+                time.sleep(min(2 ** attempt, 8))
+                # Check again after backoff before sending any bytes.
+                if store.object_exists(object_name):
+                    break
+            else:
+                if measured != expected:
+                    raise GCSOperationError(f"Source hash changed during upload: {source}")
+                break
+            finally:
+                elapsed += time.monotonic() - started
+                if on_inspected is not None:
+                    on_inspected({"upload_attempts": attempts, "upload_elapsed_seconds": elapsed})
+    info = store.object_info(object_name)
+    generation = info["generation"]
+    if (not generation.isdecimal() or int(generation) <= 0
+            or (expected_generation is not None and generation != expected_generation)
+            or info["size_bytes"] != source.stat().st_size
+            or any(info["metadata"].get(k) != v for k, v in metadata.items())):
+        raise GCSOperationError(f"Existing object collision or invalid provenance: {object_name}")
+    if on_inspected is not None:
+        on_inspected({"generation": generation, "size_bytes": info["size_bytes"]})
+    downloaded = Path(tempfile.mkdtemp(prefix="citypulse-gcs-history-")) / source.name
+    store.download_file(object_name, downloaded, expected_sha256=expected,
+                        generation=int(generation))
+    # Enforce the hash here as well as in the storage wrapper.
+    if sha256_file(downloaded) != expected:
+        raise GCSOperationError(f"Downloaded SHA-256 mismatch: {downloaded}")
+    checks = verify_parquet(source, downloaded) if source.suffix == ".parquet" else {"sha256_match": True}
+    if sha256_file(source) != expected:
+        raise GCSOperationError(f"Source changed during verification: {source}")
+    if store.object_info(object_name) != info:
+        raise GCSOperationError(f"Object generation or provenance changed during verification: {object_name}")
+    return {"generation": generation, "size_bytes": info["size_bytes"],
+            "sha256": expected, "download_path": str(downloaded), "checks": checks,
+            "verification_status": "verified"}
 
 
 def publish_parquet(
