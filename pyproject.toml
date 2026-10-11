@@ -24,6 +24,7 @@ citypulse-publish = "citypulse_ai.cloud.publish:main"
 cloud = ["google-cloud-storage>=3,<4"]
 dev = ["pytest>=8,<10"]
 notebooks = ["jupyterlab>=4,<5", "ipykernel>=6,<8", "matplotlib>=3.9,<4"]
+forecasting = ["xgboost==3.4.1", "scikit-learn>=1.6,<2", "numpy>=2,<3"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
