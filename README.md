@@ -11,8 +11,9 @@ a Python scaffold and a chunked multi-file CSV pipeline with validation, global
 duplicate checks, hourly counts, Parquet output, and a DuckDB table.
 Initial EDA in Jupyter includes saved ride counts, missing-value and
 duration checks, and an hourly-demand visualization for February 2025. Raw data
-stays local; only synthetic fixtures are committed. Weather, forecasting, APIs,
-and deployment remain future work.
+stays local; only synthetic fixtures are committed. Phase 2.1 now prepares calendar grids, coverage audits, and chronological splits
+from the reviewed warehouse. Weather, model training, APIs, and deployment remain
+future work.
 
 ## Architecture overview
 
@@ -38,7 +39,12 @@ ExperimentLab --> statistical analysis and A/B testing
 DuckDB will provide the initial SQL warehouse. Forecasting will start with simple
 baselines before adding PyTorch and TensorFlow models. SQLPilot will eventually
 use a fine-tuned text-to-SQL model with MCP, LangGraph, and vLLM. Docker, CI/CD,
-Kubernetes, and cloud hosting belong to later deployment phases.
+Kubernetes, and cloud hosting belong to later deployment phases. The original
+full scope remains unchanged: ARIMA, XGBoost, PyTorch, TensorFlow, LSTM, TFT,
+MLflow and model monitoring, QLoRA fine-tuning on H100, LangGraph/MCP/vLLM,
+FastAPI, Docker, Kubernetes, GitHub Actions, AWS and Google Cloud integration,
+and statistical analysis, A/B testing, and reporting. We implement these
+incrementally with measured experiments; this is not a reduced MVP.
 
 ## Project structure
 
@@ -49,7 +55,8 @@ Kubernetes, and cloud hosting belong to later deployment phases.
 ├── README.md                 # Objective, setup, architecture, and roadmap
 ├── pyproject.toml            # Packaging, dependencies, and pytest configuration
 ├── notebooks/
-│   └── 01_data_exploration.ipynb # Saved exploratory analysis and visualization
+│   ├── 01_data_exploration.ipynb # Existing EDA, preserved
+│   └── 02_forecasting_data_preparation.ipynb # Phase 2.1 walkthrough and plots
 ├── csv_files/                # Local raw CSVs; ignored by Git
 ├── src/
 │   └── citypulse_ai/
@@ -68,7 +75,9 @@ Kubernetes, and cloud hosting belong to later deployment phases.
 
 The ETL package contains the implemented trip pipeline, and
 `features/reporting.py` prepares the reviewed February reporting dataset.
-The remaining subpackages are placeholders. The `src/` layout separates
+`features/preparation.py` creates forecasting grids and coverage audits, with a
+module CLI in `features/cli.py`. The forecasting, evaluation, experiments, and
+SQLPilot subpackages remain placeholders. The `src/` layout separates
 importable code from repository files.
 
 ## Local setup and tests
@@ -453,10 +462,10 @@ timestamp queries use naive timestamps; the ETL's explicit UTC/DST validation
 policy remains the production contract. Raw EDA counts can differ from validated
 ETL counts.
 
-Next, review missing station values and long-duration trips with the mentor,
-decide rejection and station/hour coverage policies, and reconcile exploratory
-counts with the ETL before creating forecasting features. Phase 1.3 now supports
-cross-file duplicate checks; incremental ingestion remains future ETL work.
+Phase 1 reconciled the exploratory counts with validated ETL counts and reviewed
+reporting boundaries and station IDs. Phase 2.1 now documents coverage separately
+from station availability. Cross-file duplicate checks are implemented; incremental
+ingestion remains future ETL work.
 
 ## Phased roadmap
 
@@ -469,8 +478,10 @@ cross-file duplicate checks; incremental ingestion remains future ETL work.
    combined-file runs were verified, and reporting-window/station-ID decisions
    now have regression tests and a separate derived reporting dataset.
    Weather ingestion and aligned data contracts follow later.
-3. **Features and baseline evaluation:** build calendar/weather features, temporal
-   splits, seasonal-naive forecasts, and reproducible backtesting metrics.
+3. **Features and baseline evaluation:** Phase 2.1 calendar features, coverage
+   audits, and temporal splits are complete. Station availability verification,
+   historical extension, weather features, seasonal-naive forecasts, and
+   reproducible backtesting follow; no models have been trained.
 4. **Deep learning:** add PyTorch and TensorFlow forecasting models and compare
    measured results against the baselines.
 5. **Tracking and MLOps:** integrate MLflow, reproducible configurations, model
@@ -484,8 +495,279 @@ cross-file duplicate checks; incremental ingestion remains future ETL work.
 9. **Deployment:** containerize, add CI/CD, then introduce Kubernetes and cloud
    infrastructure as requirements justify them.
 
-Resume with **Phase 2.1: station coverage and missing-hour policy** for the reviewed
-February dataset. Decide when an absent station-hour means zero demand versus
-unknown/unavailable coverage before creating a complete forecasting grid. No
-zero-filling has been performed yet. Feature generation, temporal splits,
-weather integration, and model training remain subsequent work.
+## Phase 2.1 — forecasting-data preparation
+
+Preparation reads `february_2025_hourly_rides` from the reviewed DuckDB **read-only**.
+It does not reread raw CSVs, alter ETL rules, modify the EDA notebook, or change
+previous outputs. The canonical warehouse still preserves all 2,030,542 accepted
+trips, including the 273 January 31 starts. The February input has **2,030,269**
+starts in the half-open NYC calendar window `[2025-02-01, 2025-03-01)`.
+
+### Coverage findings and policy
+
+An absent station-hour is not sufficient evidence of zero demand or station
+closure. Trips cannot tell us whether bikes were unavailable, a station was closed,
+an identifier changed, or records were missing. The exported station target is
+**realized validated ride starts**, not unconstrained demand.
+
+- **Citywide:** create every UTC hour in the NYC-local February window. Only an
+  explicit complete-source confirmation permits a missing city hour to become
+  zero. The reviewed monthly manifest covers all three files without a sample
+  limit, and reconciliation passed. February has all **672 observed citywide
+  hours**, so **no citywide zero filling was needed**. Source completeness remains
+  an engineering assumption about the supplied archive, not proof that every
+  real-world trip was published.
+- **Station default:** construct a 672-hour audit grid for every observed ID,
+  retaining missing targets as nullable integers (`unknown`). Do not infer
+  opening/closing dates from first/last trips. Preserve distinct string IDs,
+  including the reviewed `6569.09_` exception.
+- **Optional sensitivity rule:** `--station-zero-horizon N` explicitly assumes
+  zero only within N hours after a past observed start at a training-seen station,
+  and only with complete-source confirmation. It never back-fills before first
+  activity, fills long silences beyond N, or fills stations first seen after
+  training. Such cells carry `is_zero_filled=True` and
+  `coverage_status=assumed_zero_recent_activity`; the original observed count
+  stays null. A 24-hour horizon in the notebook illustrates daily recency, not a
+  proven operating schedule or a selected optimal threshold. The default run
+  below does **not** enable this rule. Any later policy choice must use training
+  evidence and validation, never the reserved test set.
+- **Activity audit:** observed episodes separated by at least 24 consecutive
+  no-record hours and contiguous missing intervals describe recorded activity.
+  Missing intervals are explicitly `no_record_unknown_operation`, not confirmed
+  inactivity. Full-month first/last activity and coverage statistics are
+  retrospective audit metadata, **not predictive features or cohort filters**.
+
+Measured February results:
+
+| Check | Actual result |
+| --- | ---: |
+| Stations observed during February | 2,237 |
+| Stations seen in training (model cohort) | 2,224 |
+| Stations first seen after training | 13 |
+| Complete station-hour grid | 1,503,264 |
+| Observed station-hours | 598,630 |
+| Unknown station-hours (default policy) | 904,634 |
+| Assumed-zero station-hours (default policy) | 0 |
+| Duplicate station-hour keys | 0 |
+| Citywide and station target sums | 2,030,269 each |
+| No-record intervals | 185,766 |
+| Intervals lasting at least 24 hours | 3,051 |
+| Stations with at least one such interval | 830 |
+| Observed activity episodes | 5,079 |
+
+Median station coverage is **251 of 672 hours**; the range is 1–619, so no station
+has starts in every hour. **83 stations** have fewer than 24 observed hours. The
+longest no-record interval is **663 hours**. Of the missing station-hours, 49,401
+occur before a station's first February observation, 8,067 after its last, and
+847,166 between observations. These counts locate uncertainty; they cannot
+identify confirmed operationally inactive periods. Historical station
+availability, maintenance records, and an explicit identifier-history review
+are needed for that distinction.
+
+### Features, splits, and leakage prevention
+
+Store timestamps in UTC and derive `hour` (0–23), `weekday` (Monday=0), and
+`is_weekend` from **America/New_York** local time. This February has no DST change;
+its window is `[2025-02-01 05:00Z, 2025-03-01 05:00Z)`. Do not hard-code 672 hours
+for future months: build UTC instants between timezone-aware local boundaries.
+The current preparation module deliberately validates February only.
+
+| Split | NYC local half-open interval | Hours | Ride starts |
+| --- | --- | ---: | ---: |
+| Training | February 1 through February 21 | 480 | 1,309,480 |
+| Validation | February 21 through February 25 | 96 | 286,095 |
+| Test | February 25 through March 1 | 96 | 434,694 |
+
+All stations share these chronological boundaries. `training_station` freezes
+cohort membership using training observations only. The full grid also includes
+13 later-seen IDs for audit; future station models must filter to
+`training_station=True`, with a separate cold-start evaluation for those 13 IDs.
+No scalers, imputers, lag features, models, or learned station thresholds are
+fitted here. Calendar features are known ahead of time. Future target-dependent
+features must be shifted and computed using past observations only. Keep unknown
+labels masked: zero substitution or evaluating only busy observed hours can
+bias performance. A nullable station grid is prepared, but station model training
+still requires a reviewed label/availability policy; citywide targets are complete.
+
+### Reproduce and learn
+
+From the project root, with the existing environment:
+
+```bash
+PYTHONPATH=src .venv/bin/python -m citypulse_ai.features.cli \
+  --warehouse outputs/phase13-february-reviewed/citypulse.duckdb \
+  --output-dir outputs/phase21-forecasting \
+  --confirm-complete-source
+
+.venv/bin/python -m pytest -q
+source .venv/bin/activate
+python -m jupyterlab notebooks/02_forecasting_data_preparation.ipynb
+```
+
+Omit `--confirm-complete-source` for incomplete or unverified sources; absent
+citywide hours then remain unknown. Use a different output directory for any
+optional station-zero sensitivity run. No extra runtime dependencies were added.
+If needed, install development/notebook dependencies with
+`python -m pip install -e '.[dev,notebooks]'`, then register the environment with
+`python -m ipykernel install --sys-prefix --name citypulse-ai --display-name 'CityPulse AI (.venv)'`.
+
+Generated local files under `outputs/phase21-forecasting/` (ignored by Git):
+
+- `citywide_hourly.parquet`: complete city calendar, counts, provenance flags,
+  local calendar features, and split labels.
+- `station_hourly.parquet`: station calendar grid with nullable targets, original
+  observations, assumption flags, training membership, features, and splits.
+- `station_coverage.parquet`: per-ID coverage, first/last recorded activity,
+  totals, training membership, and longest no-record interval.
+- `coverage_gaps.parquet`: contiguous no-record intervals with half-open UTC
+  bounds and their position relative to observed activity.
+- `activity_periods.parquet`: retrospective recorded-activity episodes, not
+  operational schedules.
+- `report.json`: source warehouse SHA-256, policy configuration, boundaries,
+  dependency versions, and actual reconciliation/coverage counts.
+- `verification.json`: independent Parquet reconciliation, duplicate-key checks,
+  and confirmation that the source warehouse hash was unchanged.
+
+The pipeline reads the much smaller reviewed hourly table and builds a bounded
+1.5-million-row February grid in pandas; it never loads two million raw trip rows.
+For multi-month scale, prepare partitioned grids rather than expanding every
+station over all history in one in-memory table. The notebook reads summaries
+and uses a Parquet station filter for its example, with explanations and saved
+citywide, coverage, and station plots. Its optional zero demonstration changes
+no exported files.
+
+Verification: **75 tests passed, plus 6 subtests**, including 19 new Phase 2.1
+cases covering explicit zero policies, future-observation invariance, split and
+local-calendar boundaries, count conservation, identifier preservation, invalid
+inputs, activity/gap auditing, reproducible exports, and unchanged source bytes.
+An independent DuckDB query over the generated Parquet confirmed **zero duplicate
+station-hour keys** and both target sums equal **2,030,269**. Source hashing before
+and after preparation confirmed the reviewed warehouse was unchanged.
+
+### Limitations and historical extension
+
+February-only data offers 28 winter days and only 20 training days (less than
+three weekly cycles). Four-day validation and test intervals do not each cover
+an entire week. There is no annual seasonality, summer comparison, or evidence
+for robust model ranking. These are provisional learning splits, not a basis for
+production-quality model claims.
+
+Phase 2.2A fixes the historical extension at **24 consecutive months, January
+2024–December 2025**. The earlier 12–24-month proposal is superseded; retain these
+ingestion and evaluation safeguards:
+
+1. Acquire complete monthly NYC archives separately when authorized; retain
+   manifests, checksums, row counts, schema versions, and reconciliation audits.
+2. Extend reporting windows and process partitioned monthly outputs with
+   cross-period ride-ID auditing and DST-safe UTC hourly keys. Keep raw IDs;
+   introduce station mappings only through reviewed, versioned evidence.
+3. Obtain historical availability/maintenance evidence where possible; current
+   station lists alone cannot establish historical opening/closing dates. Review
+   missing targets and source outages before adopting any zero policy.
+4. Define chronological held-out periods and rolling-origin validation spanning
+   full weeks and seasons. Fit cohort criteria, transformations, and learned
+   features on each training history only. Do not use future activity or realized
+   future weather as forecast inputs.
+5. After data preparation is reviewed, proceed to forecasting baselines and
+   measured experiments, followed incrementally by the full project roadmap.
+
+**Phase 2.1 checkpoint:** review the preparation notebook and station availability
+policy with the mentor. Phase 2.2A historical ingestion is described below. No
+models or weather integration were implemented, and no changes were committed
+or pushed.
+
+
+## Phase 2.2A — historical ingestion expansion
+
+The final historical specification is **fixed**: NYC local starts in
+`[2024-01-01, 2026-01-01)`, training January 2024–June 2025, validation
+July–September 2025, and test October–December 2025. Forecast targets remain
+hourly citywide and station ride starts, with a **24-elapsed-hour horizon** and
+**100 stable stations selected using training history only**. The full platform
+roadmap remains unchanged. The February-only Phase 2.1 split is an educational
+checkpoint, not the final historical split.
+
+This phase adds official archive discovery, resumable streaming downloads,
+verified extraction, monthly orchestration around the unchanged Phase 1 ETL,
+manifest tracking, and global duplicate-audited ride-start-month partitions.
+Existing February data is registered by read-only reference. Source partitions
+stay immutable; each global reconciliation publishes a new canonical snapshot.
+No station cohort selection, zero filling, model training, notebook modification,
+weather integration, or deployment occurs in this phase.
+
+See [the historical ingestion guide](docs/historical_ingestion.md) for the
+architecture, boundary policy, current measurements, commands, and known gaps.
+
+```bash
+# Inspect archive directories and storage requirements without downloading ZIPs.
+PYTHONPATH=src .venv/bin/python -m citypulse_ai.etl.historical_cli \
+  --start 2024-01-01 --end 2026-01-01 --plan
+
+# Reuse or resume the two authorized pilots; existing verified partitions skip.
+PYTHONPATH=src .venv/bin/python -m citypulse_ai.etl.historical_cli \
+  --month 2024-01 2025-03 --chunk-size 50000 --memory-limit 512MB --reconcile
+```
+
+The 24-month ZIP total is **16.387 GiB**; the expanded CSV total is also
+**16.387 GiB**. The conservative plan budgets **71.318 GiB plus a 5 GiB reserve**,
+before January 2026 boundary input. Current disk space does not support the full
+range under that plan. Only January 2024 and March 2025 were downloaded as complete
+pilot sources. Expand storage and rerun the plan before processing the remaining
+21 modelling archives.
+
+A bounded January 2026 probe found **14 December 2025 starts in 53,277 sampled
+rows**. Include that archive as boundary input before declaring December start
+coverage complete, without extending the modelling window. This is not its full
+boundary count; very long rides and late publication still require review.
+Standalone pilot start-month counts remain partial until adjacent sources are
+available. Naive timestamps still use the reviewed NYC assumption; authoritative
+publisher timezone confirmation and fall-DST ambiguity resolution remain open.
+
+### Phase 2.2B — catalogue schema blocker fixed
+
+The failed union mixed Hive-style January/March paths with February's ordinary
+reviewed directory. DuckDB inferred an extra `source_month` column from the former;
+the physical Parquet schemas were identical. The catalogue now disables Hive
+inference and explicitly selects a fixed schema, preserving string identifiers,
+UTC epoch nanoseconds, and source provenance. Missing optional end-station/duration
+metadata becomes typed nulls; missing required fields or inconsistent exact epochs
+fail explicitly. Archive month and NYC ride-start month remain separate.
+
+**Verification:** 22 focused catalogue tests passed; the complete suite passed
+**112 tests plus 6 subtests**. A metadata-only union schema check on the three real
+partitions succeeded. No full historical scan, real-data ETL, downloads, or new
+snapshot construction ran in Phase 2.2B. Source partitions and unrelated edits
+were preserved. This was the Phase 2.2B checkpoint; the subsequent read-only
+integration verification is recorded below. See the
+[historical ingestion guide](docs/historical_ingestion.md#phase-22b--explicit-catalogue-schema-alignment)
+for the exact contract and regression coverage.
+
+## Engineering checkpoint — catalogue reconciliation and GCS
+
+Phase 2.2C executed the explicit 11-column union over the three existing processed
+archives in one read-only pass. It reconciled **7,087,613 reported input records**
+with **7,084,610 accepted rides** and **3,003 audited rejections**. No duplicate
+ride IDs were found within or across these sources, including rejection audits.
+The accepted counts are 1,886,925 for January 2024, 2,030,542 for February 2025,
+and 3,167,143 for March 2025. UTC precision and source provenance checks passed.
+The archive/local-start-month distinction preserved 410 December 2023 starts
+from January 2024, 273 January 2025 starts from February, and 410 February starts
+from March. These three archives are partial historical coverage; no canonical
+monthly snapshots were published. See [the reconciliation results](docs/historical_ingestion.md#actual-pilot-verification).
+
+Python GCS integration now uses ADC for uploads, downloads, existence/metadata
+checks, and explicit SHA-256 verification. The optional `cloud` extra installs
+`google-cloud-storage`; `citypulse-publish` publishes one existing Parquet under
+100 MiB without overwriting objects or local receipts. The 36-byte ADC smoke test
+passed, followed by publication and verified download of the existing reviewed
+February hourly artifact: **946,546 bytes and 598,630 station-hour rows** at
+`gs://citypulse-ai-511315-data/curated/forecasting/2025-02/reviewed-v1/february_2025_hourly_rides.parquet`.
+SHA-256, row count, schema including embedded metadata, and cloud provenance
+metadata matched. This is the existing February baseline; it does not yet include
+the additional February starts found in March's archive or constitute a complete
+24-month dataset. See [GCS setup, publication, and verification](docs/gcs.md).
+
+The completed implementation passed **158 automated tests plus 6 subtests**.
+Raw data, generated outputs/publication receipts, virtual environments, and ADC
+credentials remain outside the Git checkpoint. No forecasting models, weather
+integration, or deployment were added.
