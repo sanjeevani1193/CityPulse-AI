@@ -43,6 +43,10 @@ def main(argv=None):
     parser.add_argument("--register-existing", nargs="*", default=[], metavar="MONTH=OUTPUT_DIR")
     parser.add_argument("--reconcile", action="store_true", help="Build new global duplicate-audited start-month snapshot")
     parser.add_argument("--cloud-publish", action="store_true", help="OPT IN: publish and verify completed source artifacts")
+    parser.add_argument("--cloud-resume", action="store_true",
+                        help="OPT IN: verify cloud generations for missing local partitions; restore catalogue inputs")
+    parser.add_argument("--cloud-restore-root", type=Path,
+                        help="Persistent catalogue restore cache; requires --cloud-resume")
     parser.add_argument("--cloud-project")
     parser.add_argument("--cloud-bucket")
     parser.add_argument("--cloud-prefix", default="curated/historical")
@@ -80,10 +84,19 @@ def main(argv=None):
             from citypulse_ai.cloud.historical import publish_month
         except ImportError as error:
             parser.error(f"Install the cloud extra with pip install -e '.[cloud]': {error}")
-    elif (args.publish_existing_only or args.cloud_project or args.cloud_bucket
+    elif not args.cloud_resume and (args.publish_existing_only or args.cloud_project or args.cloud_bucket
           or args.cloud_prefix != "curated/historical" or args.cloud_max_file_mib != 100
           or args.cloud_upload_timeout != 600 or args.cloud_upload_attempts != 3):
         parser.error("Cloud options require explicit --cloud-publish")
+    cloud_store = None
+    if args.cloud_resume:
+        if (not args.cloud_project or not args.cloud_bucket or args.plan or args.probe_boundary
+                or args.sample_rows_per_file is not None or args.publish_existing_only):
+            parser.error("Cloud resume requires project/bucket and full processing or reconciliation mode")
+        from citypulse_ai.cloud.gcs import GCSStorage
+        cloud_store = GCSStorage(args.cloud_project, args.cloud_bucket)
+    elif args.cloud_restore_root:
+        parser.error("--cloud-restore-root requires --cloud-resume")
     if args.publish_existing_only and (args.register_existing or args.reconcile):
         parser.error("--publish-existing-only cannot register or reconcile partitions")
     if args.probe_boundary:
@@ -111,7 +124,8 @@ def main(argv=None):
                 print(json.dumps({"month": month, "status": "starting"}), flush=True)
                 result = process_month(month, args.raw_root, args.output_root, sample_rows=args.sample_rows_per_file,
                                        chunk_size=args.chunk_size, memory_limit=args.memory_limit,
-                                       reserve_bytes=int(args.reserve_gib*1024**3))
+                                       reserve_bytes=int(args.reserve_gib*1024**3),
+                                       **({'cloud_store': cloud_store} if cloud_store is not None else {}))
                 print(json.dumps(result, indent=2), flush=True)
             if args.cloud_publish:
                 publication = publish_month(month, args.output_root, project=args.cloud_project,
@@ -122,7 +136,9 @@ def main(argv=None):
                 print(json.dumps({"month": month, "cloud_publication": publication}, indent=2), flush=True)
         if args.reconcile:
             print(json.dumps(build_catalog(args.output_root, memory_limit=args.memory_limit,
-                            chunk_size=args.chunk_size, reserve_bytes=int(args.reserve_gib*1024**3)), indent=2), flush=True)
+                            chunk_size=args.chunk_size, reserve_bytes=int(args.reserve_gib*1024**3),
+                            **({'cloud_store': cloud_store, 'restore_root': args.cloud_restore_root}
+                               if cloud_store is not None else {})), indent=2), flush=True)
 
 
 if __name__ == "__main__":

@@ -114,7 +114,8 @@ def verify_run(directory: Path, report: dict) -> dict:
 
 def process_month(month: str, raw_root: Path, output_root: Path, *,
                   sample_rows: int | None = None, chunk_size: int = 50_000,
-                  memory_limit: str = "512MB", reserve_bytes: int = RESERVE_BYTES) -> dict:
+                  memory_limit: str = "512MB", reserve_bytes: int = RESERVE_BYTES,
+                  cloud_store=None) -> dict:
     """Resume raw steps; restart interrupted ETL atomically; never mix samples/full runs."""
     validate_month(month)
     if sample_rows is not None and sample_rows <= 0:
@@ -126,6 +127,9 @@ def process_month(month: str, raw_root: Path, output_root: Path, *,
     if verified_partition(entry):
         return {"month": month, "status": "skipped_verified", "output_dir": entry["output_dir"]}
     elif entry.get("status") == "processed":
+        if cloud_store is not None:
+            from citypulse_ai.cloud.retention import verify_cloud_partition
+            return verify_cloud_partition(entry, cloud_store)
         raise ValueError("Processed partition changed; preserve it and investigate before retrying")
     destination = output_root / (f"samples/{month}-n{sample_rows}" if sample_rows else f"source_month={month}")
     if destination.exists():

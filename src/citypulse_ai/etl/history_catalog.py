@@ -125,7 +125,8 @@ def write_trip_partitions(connection, destination: Path, chunk_size: int) -> Non
 
 
 def build_catalog(output_root: Path, *, memory_limit: str = "512MB", chunk_size: int = 50_000,
-                  reserve_bytes: int = 5 * 1024**3) -> dict:
+                  reserve_bytes: int = 5 * 1024**3, cloud_store=None,
+                  restore_root: Path | None = None) -> dict:
     """Publish a new immutable snapshot; prior source partitions/snapshots stay intact.
 
     Duplicates reject every occurrence, including valid IDs also seen in rejected
@@ -137,9 +138,17 @@ def build_catalog(output_root: Path, *, memory_limit: str = "512MB", chunk_size:
     entries = [entry for _, entry in sorted(manifest["archives"].items()) if entry.get("status") == "processed"]
     if not entries:
         raise ValueError("No complete source partitions registered")
-    for entry in entries:
+    for index, entry in enumerate(entries):
         if not verified_partition(entry):
-            raise ValueError(f"Source partition changed: {entry['month']}")
+            if cloud_store is None:
+                raise ValueError(f"Source partition changed: {entry['month']}")
+            from citypulse_ai.cloud.retention import restore_partition
+            cache = Path(restore_root) if restore_root is not None else root / "restored"
+            destination = cache / entry['month'] / entry['cloud_publication']['revision']
+            restored = restore_partition(entry, destination, store=cloud_store,
+                                         names=['validated_trips.parquet', 'rejected_trips.csv'],
+                                         reserve_bytes=reserve_bytes)
+            entries[index] = {**entry, 'output_dir': str(restored)}
     source_bytes = sum((Path(entry["output_dir"]) / "validated_trips.parquet").stat().st_size for entry in entries)
     check_disk(root, 8 * source_bytes, reserve_bytes)
     work_root = root / ".work"

@@ -175,3 +175,7 @@ and local manifest status inspection. The historical manifest records verified
 object generations; downloads pin both the blob generation and the matching
 precondition. Reconciliation and canonical snapshot publication remain separate.
 This phase performs no real cloud transfers during tests.
+
+Source ZIP/CSV backups, opt-in cloud resume, verified restore, and the offline
+retention dry run are documented in [Cloud-backed storage retention](cloud_retention.md).
+This adds no automatic deletion and requires separate authorization for real transfers.

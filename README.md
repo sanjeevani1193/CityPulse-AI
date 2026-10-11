@@ -785,3 +785,20 @@ The implementation passed **187 tests plus 6 subtests** using offline unit and
 synthetic integration tests; no real-month uploads, downloads, or ETL runs were
 performed in this phase. A real-month upload requires separate authorization and
 an explicit file-size ceiling large enough for its validated-trip Parquet.
+
+### Cloud-backed storage retention
+
+Original source ZIPs (or February's exact original CSVs), audit JSONs and immutable
+per-month processing-manifest snapshots can now be backed up through an explicit
+create-only command. Opt-in cloud resume verifies prior checksums against unchanged
+live object generations; catalogue construction can restore its required Parquet
+and rejection-audit inputs to a persistent cache. Local-only behavior stays unchanged.
+The offline retention report explains recovery requirements and blockers; it has
+no deletion mode. See [commands and retention policy](docs/cloud_retention.md).
+
+The implementation passed **235 automated tests plus 6 subtests** using mocked GCS
+operations and synthetic files. The real metadata-only dry run identified 52
+potential candidates (3.34 GiB), with **zero bytes eligible** under current evidence:
+source/manifest backups and February's full historical publication still need
+separately authorized verification. No real transfers, historical ETL, cleanup,
+commits or pushes were performed during this implementation.
