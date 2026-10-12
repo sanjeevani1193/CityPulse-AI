@@ -42,6 +42,13 @@ def main(argv=None):
     parser.add_argument("--probe-boundary", action="store_true", help="Read small remote CSV prefixes; never mark the archive processed")
     parser.add_argument("--register-existing", nargs="*", default=[], metavar="MONTH=OUTPUT_DIR")
     parser.add_argument("--reconcile", action="store_true", help="Build new global duplicate-audited start-month snapshot")
+    parser.add_argument("--reconcile-temporary", action="store_true",
+                        help="Offline audit only; retain JSON without a persistent catalog")
+    parser.add_argument("--reconciliation-input", action="append", default=[], metavar="MONTH=DIR",
+                        help="Verified local/restored temporary input directory")
+    parser.add_argument("--reconciliation-report-root", type=Path)
+    parser.add_argument("--reconciliation-workspace-parent", type=Path)
+    parser.add_argument("--reconciliation-spill-gib", type=float, default=4)
     parser.add_argument("--cloud-publish", action="store_true", help="OPT IN: publish and verify completed source artifacts")
     parser.add_argument("--cloud-resume", action="store_true",
                         help="OPT IN: verify cloud generations for missing local partitions; restore catalogue inputs")
@@ -59,6 +66,38 @@ def main(argv=None):
     parser.add_argument("--publish-existing-only", action="store_true",
                         help="Publish registered processed months without downloads or ETL")
     args = parser.parse_args(argv)
+    temporary_options = (args.reconciliation_input or args.reconciliation_report_root
+                         or args.reconciliation_workspace_parent or args.reconciliation_spill_gib != 4)
+    if temporary_options and not args.reconcile_temporary:
+        parser.error("Temporary reconciliation options require --reconcile-temporary")
+    if args.reconcile_temporary:
+        if (args.month or args.start or args.end or args.reconcile or args.register_existing
+                or args.plan or args.probe_boundary or args.sample_rows_per_file is not None
+                or args.cloud_publish or args.cloud_resume or args.publish_existing_only
+                or args.cloud_project or args.cloud_bucket or args.cloud_restore_root
+                or args.cloud_prefix != "curated/historical" or args.cloud_max_file_mib != 100
+                or args.cloud_upload_timeout != 600 or args.cloud_upload_attempts != 3):
+            parser.error("Temporary reconciliation is standalone and offline; no ingestion/cloud modes")
+        if (not math.isfinite(args.reconciliation_spill_gib) or args.reconciliation_spill_gib <= 0
+                or not math.isfinite(args.reserve_gib) or args.reserve_gib < 0):
+            parser.error("Spill limit must be finite/positive and reserve finite/nonnegative")
+        paths = {}
+        for item in args.reconciliation_input:
+            try:
+                month, directory = item.split("=", 1)
+                validate_month(month)
+                if not directory or month in paths:
+                    raise ValueError("Empty directory or duplicate month")
+                paths[month] = Path(directory)
+            except ValueError:
+                parser.error("Inputs must be unique MONTH=DIR entries")
+        from citypulse_ai.etl.temporary_reconciliation import reconcile_temporary
+        print(json.dumps(reconcile_temporary(
+            args.output_root, input_paths=paths, report_root=args.reconciliation_report_root,
+            workspace_parent=args.reconciliation_workspace_parent, memory_limit=args.memory_limit,
+            spill_limit_bytes=int(args.reconciliation_spill_gib * 1024**3),
+            reserve_bytes=int(args.reserve_gib * 1024**3)), indent=2), flush=True)
+        return
     if args.month and (args.start or args.end):
         parser.error("Use --month OR --start/--end")
     if bool(args.start) != bool(args.end):

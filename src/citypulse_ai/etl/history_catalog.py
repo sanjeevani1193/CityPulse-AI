@@ -124,6 +124,111 @@ def write_trip_partitions(connection, destination: Path, chunk_size: int) -> Non
                 writers[month].write_batch(subset)
 
 
+def create_reconciliation_relations(connection, entries: list[dict]) -> list[dict]:
+    """Shared SQL contract; relation lifetime belongs to the caller connection."""
+    valid_queries, raw_queries, schema_audit = [], [], []
+    for entry in entries:
+        source = Path(entry["output_dir"])
+        month = sql_literal(entry["month"])
+        rejected = sql_literal(source / "rejected_trips.csv")
+        valid_query, audit = aligned_trip_query(source / "validated_trips.parquet", entry["month"])
+        valid_queries.append(valid_query)
+        schema_audit.append(audit)
+        end_station = rejected_end_station_expression(source / "rejected_trips.csv")
+        raw_queries.extend([
+            f"""SELECT {month} AS source_archive_month, source_file, source_row,
+                ride_id, trim(ride_id) AS normalized_ride_id,
+                CAST(started_at AS VARCHAR) AS started_at, CAST(ended_at AS VARCHAR) AS ended_at,
+                started_at_utc_ns, ended_at_utc_ns, start_station_id, end_station_id,
+                true AS locally_valid, '' AS original_rejection_reasons
+                FROM ({valid_query}) AS aligned""",
+            f"""SELECT {month} AS source_archive_month, source_file, CAST(source_row AS BIGINT),
+                ride_id, trim(coalesce(ride_id,'')) AS normalized_ride_id,
+                started_at, ended_at, NULL::BIGINT AS started_at_utc_ns, NULL::BIGINT AS ended_at_utc_ns,
+                start_station_id, {end_station}, false AS locally_valid,
+                rejection_reasons AS original_rejection_reasons
+                FROM read_csv({rejected}, header=true, all_varchar=true)""",
+        ])
+    connection.execute("CREATE VIEW locally_valid_trips AS " + " UNION ALL ".join(valid_queries))
+    validate_required_values(connection)
+    connection.execute("CREATE VIEW raw_ride_occurrences AS " + " UNION ALL ".join(raw_queries))
+    connection.execute("""CREATE TABLE duplicate_ids AS
+        SELECT normalized_ride_id, count(*) AS occurrences,
+               count(DISTINCT source_archive_month) AS archive_count
+        FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
+        GROUP BY normalized_ride_id HAVING count(*) > 1""")
+    connection.execute("""CREATE VIEW canonical_trips AS
+        SELECT t.*, strftime(started_at AT TIME ZONE 'America/New_York','%Y-%m') AS start_month
+        FROM locally_valid_trips t WHERE NOT EXISTS
+        (SELECT 1 FROM duplicate_ids d WHERE d.normalized_ride_id = trim(t.ride_id))""")
+    connection.execute("""CREATE VIEW canonical_rejections AS
+        SELECT r.*, d.normalized_ride_id IS NOT NULL AS duplicate_ride_id,
+            coalesce(d.archive_count > 1,false) AS cross_archive_duplicate,
+            CASE WHEN d.normalized_ride_id IS NOT NULL AND
+                 NOT contains(coalesce(original_rejection_reasons,''),'duplicate_ride_id')
+                 THEN concat_ws(';',nullif(original_rejection_reasons,''),'duplicate_ride_id')
+                 ELSE original_rejection_reasons END AS rejection_reasons
+        FROM raw_ride_occurrences r LEFT JOIN duplicate_ids d USING(normalized_ride_id)
+        WHERE NOT r.locally_valid OR d.normalized_ride_id IS NOT NULL""")
+    connection.execute("""CREATE TABLE hourly_rides AS
+        SELECT start_month,start_station_id,date_trunc('hour',started_at) AS hour_start,
+               count(*)::BIGINT AS ride_count FROM canonical_trips
+        GROUP BY start_month,start_station_id,hour_start""")
+    connection.execute("""CREATE VIEW model_window_hourly_rides AS
+        SELECT * FROM hourly_rides
+        WHERE hour_start >= TIMESTAMPTZ '2024-01-01 00:00:00 America/New_York'
+          AND hour_start < TIMESTAMPTZ '2026-01-01 00:00:00 America/New_York'""")
+    return schema_audit
+
+
+def reconciliation_report(connection, entries: list[dict], manifest: dict,
+                          schema_audit: list[dict], started: float) -> dict:
+    """Apply the same global reconciliation and NYC start-month accounting."""
+    inputs = sum(entry["input_rows"] for entry in entries)
+    accepted = connection.execute("SELECT count(*) FROM canonical_trips").fetchone()[0]
+    rejected_count = connection.execute("SELECT count(*) FROM canonical_rejections").fetchone()[0]
+    hourly_rows, starts, unique_keys = connection.execute("""
+        SELECT count(*),coalesce(sum(ride_count),0),count(DISTINCT(start_station_id,hour_start))
+        FROM hourly_rides""").fetchone()
+    if inputs != accepted + rejected_count or accepted != starts or hourly_rows != unique_keys:
+        raise ValueError("Global reconciliation or station-hour uniqueness failed")
+    start_counts = dict(connection.execute("SELECT start_month,count(*) FROM canonical_trips GROUP BY start_month ORDER BY start_month").fetchall())
+    boundary_counts = connection.execute("""SELECT source_archive_month,start_month,count(*) AS ride_starts
+        FROM canonical_trips WHERE source_archive_month <> start_month
+        GROUP BY source_archive_month,start_month ORDER BY source_archive_month,start_month""").fetchall()
+    duplicate_count, cross_count = connection.execute("SELECT count(*),count(*) FILTER(WHERE archive_count>1) FROM duplicate_ids").fetchone()
+    cross_rejected = connection.execute("SELECT count(*) FROM canonical_rejections WHERE locally_valid AND cross_archive_duplicate").fetchone()[0]
+    model_count = connection.execute("""SELECT count(*) FROM canonical_trips
+        WHERE started_at >= TIMESTAMPTZ '2024-01-01 00:00:00 America/New_York'
+          AND started_at < TIMESTAMPTZ '2026-01-01 00:00:00 America/New_York'""").fetchone()[0]
+    expected = month_range("2024-01-01", "2026-01-01")
+    registered = {entry["month"] for entry in entries}
+    missing = sorted(set(expected) - registered)
+    report = {"source_archives": [entry["month"] for entry in entries],
+              "source_schema_alignment": schema_audit,
+              "source_output_sha256": {entry["month"]: entry["output_sha256"] for entry in entries},
+              "input_rows": inputs, "accepted_rows": accepted, "rejected_rows": rejected_count,
+              "local_accepted_rows": sum(entry["accepted_rows"] for entry in entries),
+              "additional_cross_archive_rejections": cross_rejected,
+              "duplicate_ride_ids": duplicate_count, "cross_archive_duplicate_ride_ids": cross_count,
+              "hourly_rows": hourly_rows, "hourly_ride_starts": starts,
+              "duplicate_station_hour_keys": hourly_rows - unique_keys,
+              "start_month_counts": start_counts,
+              "boundary_start_counts": [{"source_archive_month": source, "start_month": month,
+                                          "ride_starts": count} for source,month,count in boundary_counts],
+              "modelling_specification": manifest["modelling_specification"],
+              "in_window_ride_starts": model_count, "out_of_window_ride_starts": accepted-model_count,
+              "missing_modelling_source_archives": missing,
+              "january_2026_boundary_input_present": "2026-01" in registered,
+              "historical_start_coverage_status": "unverified_partial" if missing or "2026-01" not in registered else "all_planned_sources_present_still_requires_boundary_review",
+              "zero_filled": False, "elapsed_seconds": perf_counter()-started,
+              "timestamp_policy": "Inherited Phase 1 NYC-naive/DST rejection; UTC ns reconstructed from exact epoch columns",
+              "notes": ["Publication-month completeness is not proven start-month completeness.",
+                        "Nonadjacent pilots are partial history, not complete modelling partitions.",
+                        "No station cohort selection, features, forecast samples or model training in this phase."]}
+    return report
+
+
 def build_catalog(output_root: Path, *, memory_limit: str = "512MB", chunk_size: int = 50_000,
                   reserve_bytes: int = 5 * 1024**3, cloud_store=None,
                   restore_root: Path | None = None) -> dict:
@@ -161,111 +266,21 @@ def build_catalog(output_root: Path, *, memory_limit: str = "512MB", chunk_size:
             "memory_limit": memory_limit, "threads": 2, "temp_directory": str(Path(work) / "spill"),
         }) as connection:
             connection.execute("SET TimeZone = 'UTC'")
-            valid_queries, raw_queries, schema_audit = [], [], []
-            for entry in entries:
-                source = Path(entry["output_dir"])
-                month = sql_literal(entry["month"])
-                rejected = sql_literal(source / "rejected_trips.csv")
-                valid_query, audit = aligned_trip_query(source / "validated_trips.parquet", entry["month"])
-                valid_queries.append(valid_query)
-                schema_audit.append(audit)
-                end_station = rejected_end_station_expression(source / "rejected_trips.csv")
-                raw_queries.extend([
-                    f"""SELECT {month} AS source_archive_month, source_file, source_row,
-                        ride_id, trim(ride_id) AS normalized_ride_id,
-                        CAST(started_at AS VARCHAR) AS started_at, CAST(ended_at AS VARCHAR) AS ended_at,
-                        started_at_utc_ns, ended_at_utc_ns, start_station_id, end_station_id,
-                        true AS locally_valid, '' AS original_rejection_reasons
-                        FROM ({valid_query}) AS aligned""",
-                    f"""SELECT {month} AS source_archive_month, source_file, CAST(source_row AS BIGINT),
-                        ride_id, trim(coalesce(ride_id,'')) AS normalized_ride_id,
-                        started_at, ended_at, NULL::BIGINT AS started_at_utc_ns, NULL::BIGINT AS ended_at_utc_ns,
-                        start_station_id, {end_station}, false AS locally_valid,
-                        rejection_reasons AS original_rejection_reasons
-                        FROM read_csv({rejected}, header=true, all_varchar=true)""",
-                ])
-            connection.execute("CREATE VIEW locally_valid_trips AS " + " UNION ALL ".join(valid_queries))
-            validate_required_values(connection)
-            connection.execute("CREATE VIEW raw_ride_occurrences AS " + " UNION ALL ".join(raw_queries))
-            connection.execute("""CREATE TABLE duplicate_ids AS
-                SELECT normalized_ride_id, count(*) AS occurrences,
-                       count(DISTINCT source_archive_month) AS archive_count
-                FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
-                GROUP BY normalized_ride_id HAVING count(*) > 1""")
-            connection.execute("""CREATE VIEW canonical_trips AS
-                SELECT t.*, strftime(started_at AT TIME ZONE 'America/New_York','%Y-%m') AS start_month
-                FROM locally_valid_trips t WHERE NOT EXISTS
-                (SELECT 1 FROM duplicate_ids d WHERE d.normalized_ride_id = trim(t.ride_id))""")
-            connection.execute("""CREATE VIEW canonical_rejections AS
-                SELECT r.*, d.normalized_ride_id IS NOT NULL AS duplicate_ride_id,
-                    coalesce(d.archive_count > 1,false) AS cross_archive_duplicate,
-                    CASE WHEN d.normalized_ride_id IS NOT NULL AND
-                         NOT contains(coalesce(original_rejection_reasons,''),'duplicate_ride_id')
-                         THEN concat_ws(';',nullif(original_rejection_reasons,''),'duplicate_ride_id')
-                         ELSE original_rejection_reasons END AS rejection_reasons
-                FROM raw_ride_occurrences r LEFT JOIN duplicate_ids d USING(normalized_ride_id)
-                WHERE NOT r.locally_valid OR d.normalized_ride_id IS NOT NULL""")
-            connection.execute("""CREATE TABLE hourly_rides AS
-                SELECT start_month,start_station_id,date_trunc('hour',started_at) AS hour_start,
-                       count(*)::BIGINT AS ride_count FROM canonical_trips
-                GROUP BY start_month,start_station_id,hour_start""")
-            connection.execute("""CREATE VIEW model_window_hourly_rides AS
-                SELECT * FROM hourly_rides
-                WHERE hour_start >= TIMESTAMPTZ '2024-01-01 00:00:00 America/New_York'
-                  AND hour_start < TIMESTAMPTZ '2026-01-01 00:00:00 America/New_York'""")
-            inputs = sum(entry["input_rows"] for entry in entries)
-            accepted = connection.execute("SELECT count(*) FROM canonical_trips").fetchone()[0]
-            rejected_count = connection.execute("SELECT count(*) FROM canonical_rejections").fetchone()[0]
-            hourly_rows, starts, unique_keys = connection.execute("""
-                SELECT count(*),coalesce(sum(ride_count),0),count(DISTINCT(start_station_id,hour_start))
-                FROM hourly_rides""").fetchone()
-            if inputs != accepted + rejected_count or accepted != starts or hourly_rows != unique_keys:
-                raise ValueError("Global reconciliation or station-hour uniqueness failed")
-            start_counts = dict(connection.execute("SELECT start_month,count(*) FROM canonical_trips GROUP BY start_month ORDER BY start_month").fetchall())
-            boundary_counts = connection.execute("""SELECT source_archive_month,start_month,count(*) AS ride_starts
-                FROM canonical_trips WHERE source_archive_month <> start_month
-                GROUP BY source_archive_month,start_month ORDER BY source_archive_month,start_month""").fetchall()
-            duplicate_count, cross_count = connection.execute("SELECT count(*),count(*) FILTER(WHERE archive_count>1) FROM duplicate_ids").fetchone()
-            cross_rejected = connection.execute("SELECT count(*) FROM canonical_rejections WHERE locally_valid AND cross_archive_duplicate").fetchone()[0]
-            model_count = connection.execute("""SELECT count(*) FROM canonical_trips
-                WHERE started_at >= TIMESTAMPTZ '2024-01-01 00:00:00 America/New_York'
-                  AND started_at < TIMESTAMPTZ '2026-01-01 00:00:00 America/New_York'""").fetchone()[0]
+            schema_audit = create_reconciliation_relations(connection, entries)
+            report = reconciliation_report(connection, entries, manifest, schema_audit, started)
             write_trip_partitions(connection, destination / "trips", chunk_size)
             connection.execute("COPY (SELECT * FROM hourly_rides ORDER BY start_month,start_station_id,hour_start) TO ? (FORMAT PARQUET, PARTITION_BY(start_month))", [str(destination / "hourly")])
             for table in ("canonical_rejections", "duplicate_ids"):
                 connection.execute(f"COPY (SELECT * FROM {table}) TO ? (FORMAT PARQUET)", [str(destination / f"{table}.parquet")])
+            # Persistent catalogs retain their original source-file dependencies.
+            report["elapsed_seconds"] = perf_counter() - started
             # Auditable DB views refer to the immutable source partitions, not temporary files.
-            expected = month_range("2024-01-01", "2026-01-01")
-            registered = {entry["month"] for entry in entries}
-            missing = sorted(set(expected) - registered)
-            report = {"source_archives": [entry["month"] for entry in entries],
-                      "source_schema_alignment": schema_audit,
-                      "source_output_sha256": {entry["month"]: entry["output_sha256"] for entry in entries},
-                      "input_rows": inputs, "accepted_rows": accepted, "rejected_rows": rejected_count,
-                      "local_accepted_rows": sum(entry["accepted_rows"] for entry in entries),
-                      "additional_cross_archive_rejections": cross_rejected,
-                      "duplicate_ride_ids": duplicate_count, "cross_archive_duplicate_ride_ids": cross_count,
-                      "hourly_rows": hourly_rows, "hourly_ride_starts": starts,
-                      "duplicate_station_hour_keys": hourly_rows - unique_keys,
-                      "start_month_counts": start_counts,
-                      "boundary_start_counts": [{"source_archive_month": source, "start_month": month,
-                                                  "ride_starts": count} for source,month,count in boundary_counts],
-                      "modelling_specification": manifest["modelling_specification"],
-                      "in_window_ride_starts": model_count, "out_of_window_ride_starts": accepted-model_count,
-                      "missing_modelling_source_archives": missing,
-                      "january_2026_boundary_input_present": "2026-01" in registered,
-                      "historical_start_coverage_status": "unverified_partial" if missing or "2026-01" not in registered else "all_planned_sources_present_still_requires_boundary_review",
-                      "zero_filled": False, "elapsed_seconds": perf_counter()-started,
-                      "timestamp_policy": "Inherited Phase 1 NYC-naive/DST rejection; UTC ns reconstructed from exact epoch columns",
-                      "notes": ["Publication-month completeness is not proven start-month completeness.",
-                                "Nonadjacent pilots are partial history, not complete modelling partitions.",
-                                "No station cohort selection, features, forecast samples or model training in this phase."]}
         write_json(destination / "report.json", report)
         snapshots = root / "canonical" / "snapshots"
         snapshots.mkdir(parents=True, exist_ok=True)
         target = snapshots / uuid.uuid4().hex
         destination.rename(target)
     write_json(root / "canonical" / "CURRENT.json", {"snapshot": str(target), "report": str(target / "report.json")})
-    manifest["canonical"] = {"snapshot": str(target), "input_rows": inputs, "accepted_rows": accepted}
+    manifest["canonical"] = {"snapshot": str(target), "input_rows": report["input_rows"], "accepted_rows": report["accepted_rows"]}
     write_json(root / "manifest.json", manifest)
     return {"snapshot": str(target), **report}

@@ -165,3 +165,10 @@ Unregistered older runs/test caches need separate review; no cleanup is implemen
 For `--cloud-resume`, unprocessed months still follow normal ingestion, which may
 download archives and run ETL. Authorize those operations separately and confirm
 that the requested partition is already processed when only verifying resume.
+
+## Temporary reconciliation
+
+For an offline count/duplicate/boundary audit without new persistent catalog
+dependencies, use the standalone `--reconcile-temporary` mode described in
+[temporary reconciliation and recovery](temporary_reconciliation.md). This does
+not change existing snapshot dependencies or authorize source/cache cleanup.
