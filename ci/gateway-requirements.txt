@@ -1,0 +1,13 @@
+# Linux x86-64 CI; do not reuse the ARM64-only Docker wheel URL.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.1+cpu
+xgboost-cpu==3.4.1
+fastapi==0.143.0
+httpx==0.28.1
+numpy==2.5.3
+pandas==3.0.6
+scikit-learn==1.9.1
+duckdb==1.5.6
+pyarrow==23.0.1
+pytz==2026.5
+pytest==9.1.1

@@ -1,0 +1,100 @@
+name: Inference CI
+
+'on':
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: inference-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PYTHONPATH: src
+  PYTHONDONTWRITEBYTECODE: '1'
+  CITYPULSE_CI_REQUIRE_NO_SKIPS: '1'
+  OMP_NUM_THREADS: '1'
+  OPENBLAS_NUM_THREADS: '1'
+  CUDA_VISIBLE_DEVICES: '-1'
+
+jobs:
+  repository-checks:
+    name: Repository and Docker configuration
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+      - name: Check changed-file whitespace
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          if [[ -n "$BASE_SHA" ]] && git cat-file -e "${BASE_SHA}^{commit}" 2>/dev/null; then
+            git diff --check "$BASE_SHA" HEAD
+          else
+            git diff --check "$(git hash-object -t tree /dev/null)" HEAD
+          fi
+      - name: Install small YAML validator dependency
+        run: |
+          python -m pip install --only-binary=:all: PyYAML==6.0.3
+      - name: Check Python syntax, workflow and Docker definitions
+        run: python scripts/check_ci.py
+      - name: Validate Compose without building or starting services
+        run: docker compose config --quiet
+
+  gateway-tests:
+    name: Artifact-free gateway contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+          cache-dependency-path: ci/gateway-requirements.txt
+      - name: Install gateway CPU and test dependencies
+        run: |
+          python -m pip install --only-binary=:all: -r ci/gateway-requirements.txt
+          python -m pip check
+      - name: Require serving runtimes
+        run: python -c "import torch, xgboost, fastapi, httpx, sklearn, duckdb, pyarrow"
+      - name: Run required gateway contracts without local artifacts
+        run: python -m pytest tests/ci/test_gateway.py -q --tb=short
+
+  worker-tests:
+    name: Artifact-free TensorFlow worker contracts
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: ci/worker-requirements.txt
+      - name: Install worker CPU and test dependencies
+        run: |
+          python -m pip install --only-binary=:all: -r ci/worker-requirements.txt
+          python -m pip check
+      - name: Require worker runtimes
+        run: python -c "import tensorflow, keras, fastapi, httpx, sklearn, h5py, duckdb, pyarrow"
+      - name: Run required worker contracts without local artifacts
+        run: python -m pytest tests/ci/test_worker.py -q --tb=short

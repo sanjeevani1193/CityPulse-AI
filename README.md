@@ -809,3 +809,10 @@ The existing PyTorch citywide MLP can be served locally with `/health` and
 `/predict`, using its saved weights and training-fitted scalers. See
 [the FastAPI guide](docs/local_mlp_api.md) for artifact checks, launch commands,
 request examples, elapsed-hour/DST semantics and exploratory-model limitations.
+
+## Inference continuous integration
+
+[GitHub Actions CI](docs/github_actions_ci.md) checks repository/Docker
+configuration and artifact-free gateway and TensorFlow worker contracts on
+pushes to `main` and pull requests targeting `main`. Trained-model parity remains
+a separate local check; CI does not train models, build images or deploy services.
