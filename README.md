@@ -802,3 +802,10 @@ potential candidates (3.34 GiB), with **zero bytes eligible** under current evid
 source/manifest backups and February's full historical publication still need
 separately authorized verification. No real transfers, historical ETL, cleanup,
 commits or pushes were performed during this implementation.
+
+## Local MLP inference API
+
+The existing PyTorch citywide MLP can be served locally with `/health` and
+`/predict`, using its saved weights and training-fitted scalers. See
+[the FastAPI guide](docs/local_mlp_api.md) for artifact checks, launch commands,
+request examples, elapsed-hour/DST semantics and exploratory-model limitations.
