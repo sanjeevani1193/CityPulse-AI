@@ -1,0 +1,64 @@
+services:
+  forecast-gateway:
+    image: citypulse-forecast-gateway:local
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"
+    environment:
+      CITYPULSE_MLP_ARTIFACT_DIR: /artifacts/mlp
+      CITYPULSE_XGBOOST_ARTIFACT_DIR: /artifacts/xgboost
+      CITYPULSE_LSTM_WORKER_URL: http://lstm-worker:8001
+      CITYPULSE_LSTM_COMPOSE_NETWORK: "1"
+    volumes:
+      - type: bind
+        source: ./outputs/phase3-pytorch-mlp-jan-feb-2024/run-20261012T125502822756Z
+        target: /artifacts/mlp
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ./outputs/phase3-xgboost-jan-feb-2024/recovered-83a9eaa90d964c889a03c7b6ec7de09d
+        target: /artifacts/xgboost
+        read_only: true
+        bind:
+          create_host_path: false
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [inference, gateway-host]
+  lstm-worker:
+    image: citypulse-lstm-worker:local
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      CITYPULSE_LSTM_ARTIFACT_DIR: /artifacts/lstm
+    volumes:
+      - type: bind
+        source: ./outputs/phase3-tensorflow-lstm-jan-feb-2024/run-20261012T141848308777Z
+        target: /artifacts/lstm
+        read_only: true
+        bind:
+          create_host_path: false
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges:true]
+    networks: [inference]
+networks:
+  inference:
+    internal: true
+  gateway-host: {}

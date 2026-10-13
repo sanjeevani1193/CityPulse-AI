@@ -1,4 +1,4 @@
-"""Bounded loopback HTTP adapter; this module never imports TensorFlow."""
+"""Bounded local/Compose HTTP adapter; this module never imports TensorFlow."""
 
 import os
 from urllib.parse import urlsplit
@@ -19,10 +19,13 @@ class LSTMWorkerClient:
         url = os.environ.get("CITYPULSE_LSTM_WORKER_URL", "http://127.0.0.1:8001")
         parsed = urlsplit(url)
         _ = parsed.port  # Reject malformed ports before constructing the client.
-        if (parsed.scheme != "http" or parsed.hostname not in {"127.0.0.1", "localhost", "::1"}
+        allowed_hosts = {"127.0.0.1", "localhost", "::1"}
+        if os.environ.get("CITYPULSE_LSTM_COMPOSE_NETWORK") == "1":
+            allowed_hosts.add("lstm-worker")
+        if (parsed.scheme != "http" or parsed.hostname not in allowed_hosts
                 or parsed.username or parsed.password or parsed.path not in {"", "/"}
                 or parsed.query or parsed.fragment):
-            raise ValueError("LSTM worker URL must be a fixed loopback HTTP origin")
+            raise ValueError("LSTM worker URL must use an allowed local HTTP origin")
         self.client = httpx.Client(base_url=url, timeout=httpx.Timeout(5.0, connect=1.0),
                                    limits=httpx.Limits(max_connections=4, max_keepalive_connections=2),
                                    follow_redirects=False, trust_env=False, transport=transport)

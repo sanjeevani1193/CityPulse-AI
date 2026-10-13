@@ -76,6 +76,19 @@ def test_worker_url_restricted_to_operator_configured_loopback(monkeypatch,url):
     with pytest.raises(ValueError):LSTMWorkerClient()
 
 
+def test_compose_hostname_requires_explicit_operator_opt_in(monkeypatch):
+    monkeypatch.setenv('CITYPULSE_LSTM_WORKER_URL', 'http://lstm-worker:8001')
+    monkeypatch.delenv('CITYPULSE_LSTM_COMPOSE_NETWORK', raising=False)
+    with pytest.raises(ValueError):
+        LSTMWorkerClient()
+    monkeypatch.setenv('CITYPULSE_LSTM_COMPOSE_NETWORK', '1')
+    client = LSTMWorkerClient()
+    client.close()
+    monkeypatch.setenv('CITYPULSE_LSTM_WORKER_URL', 'http://untrusted:8001')
+    with pytest.raises(ValueError):
+        LSTMWorkerClient()
+
+
 @pytest.mark.parametrize('case',['future','gap','duplicate','midnight','negative'])
 def test_invalid_lstm_inputs_never_reach_worker(monkeypatch,case):
     calls=[]

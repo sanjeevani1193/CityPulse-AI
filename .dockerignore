@@ -1,0 +1,9 @@
+**
+!src/
+!src/citypulse_ai/
+!src/citypulse_ai/**
+!docker/
+!docker/*.Dockerfile
+!docker/*.requirements.txt
+**/__pycache__/
+**/*.pyc
