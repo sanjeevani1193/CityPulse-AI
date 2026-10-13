@@ -21,7 +21,7 @@ from tests.test_inference_api import payload
 @pytest.fixture(scope="module")
 def client():
     with TestClient(api.create_app()) as session:
-        assert all(row["ready"] for row in session.get("/models").json()["models"])
+        assert all(row["ready"] for row in session.get("/models").json()["models"][:2])
         yield session
 
 
@@ -29,8 +29,8 @@ def test_model_listing_and_backward_compatible_default(client):
     listing = client.get("/models")
     assert listing.status_code == 200
     assert listing.json()["default_model"] == "pytorch-mlp"
-    assert [r["id"] for r in listing.json()["models"]] == ["pytorch-mlp", "xgboost"]
-    assert all(r["ready"] and r["model_version"] for r in listing.json()["models"])
+    assert [r["id"] for r in listing.json()["models"]] == ["pytorch-mlp", "xgboost", "tensorflow-lstm"]
+    assert all(r["ready"] and r["model_version"] for r in listing.json()["models"][:2])
     default = client.post("/predict", json=payload())
     explicit = client.post("/predict", json={**payload(), "model": "pytorch-mlp"})
     assert default.status_code == explicit.status_code == 200

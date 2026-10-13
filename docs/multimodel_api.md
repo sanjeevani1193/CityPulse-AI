@@ -1,6 +1,7 @@
 # Citywide MLP and XGBoost inference
 
-The existing API now serves two independently loaded frozen models. Requests
+The existing API loads two frozen models and routes LSTM requests to a separate
+local TensorFlow worker; see [LSTM integration](lstm_worker_api.md). Requests
 without a `model` field still select the PyTorch MLP. Its prediction values,
 scalers, response keys, `model_name` and version are unchanged.
 
@@ -16,6 +17,7 @@ in [the original API guide](local_mlp_api.md) remain applicable to both models.
 | --- | --- | --- |
 | `pytorch-mlp` (default) | `citywide-pytorch-mlp` | January-fitted feature scaler → 9/32/16/1 MLP → saved target inverse scaler |
 | `xgboost` | `xgboost` | Nine raw features → 150 depth-3 regression trees, no scalers |
+| `tensorflow-lstm` | `tensorflow-lstm` | Last 48 observed hours → saved univariate scaler → LSTM(32)/Dense(24) in a separate worker |
 
 Both return floats clipped at zero, following their original evaluation rules.
 The MLP learns nonlinear transformations with dense layers; XGBoost combines
@@ -72,7 +74,8 @@ This setting does not install libraries or modify environment files. Missing
 native OpenMP makes XGBoost unready; use startup logs to diagnose it. `/health`
 retains its original default-MLP semantics: 200 when MLP is ready, 503 otherwise.
 Use `/models` to check each model independently, including if XGBoost is usable
-while the default MLP is not. No TensorFlow or TFT model is registered.
+while the default MLP is not. LSTM readiness is checked live through the worker's
+health endpoint; TFT is not registered.
 
 `GET /models` returns configured model identities/versions and actual startup
 readiness, for example:
@@ -96,7 +99,9 @@ never silently substituted for a requested unavailable model.
 
 ## Selecting predictions
 
-Use the full 168-hour minimum history described in the original API guide.
+Use at least 168 hours for MLP/XGBoost or 48 for LSTM (up to 8,760 contiguous
+hours for any model); longer LSTM histories are validated before forwarding
+only the final 48 hours.
 Add a top-level `model` field to that request JSON:
 
 ```python

@@ -26,11 +26,10 @@ class Observation(BaseModel):
     ride_count: int = Field(strict=True, ge=0, le=2**53 - 1)
 
 
-class PredictionRequest(BaseModel):
+class HistoryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     origin: StrictStr
-    model: Literal["pytorch-mlp", "xgboost"] = "pytorch-mlp"
-    history: list[Observation] = Field(min_length=168, max_length=8760)
+    history: list[Observation] = Field(min_length=48, max_length=8760)
 
     @model_validator(mode="after")
     def validate_history(self):
@@ -56,12 +55,40 @@ class PredictionRequest(BaseModel):
                          index=pd.DatetimeIndex([instant(item.timestamp) for item in self.history]))
 
 
+class PredictionRequest(HistoryRequest):
+    model: Literal["pytorch-mlp", "xgboost", "tensorflow-lstm"] = "pytorch-mlp"
+
+    @model_validator(mode="after")
+    def validate_model_history(self):
+        if self.model != "tensorflow-lstm" and len(self.history) < 168:
+            raise ValueError("MLP and XGBoost require at least 168 historical hours")
+        return self
+
+
+class LSTMRequest(HistoryRequest):
+    history: list[Observation] = Field(min_length=48, max_length=48)
+
+
 class PredictionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
     origin: str
     timezone: str
     model_name: str
     model_version: str
-    target_timestamps_utc: list[str]
-    target_timestamps_local: list[str]
-    utc_offsets: list[str]
-    predicted_ride_counts: list[float]
+    target_timestamps_utc: list[str] = Field(min_length=24, max_length=24)
+    target_timestamps_local: list[str] = Field(min_length=24, max_length=24)
+    utc_offsets: list[str] = Field(min_length=24, max_length=24)
+    predicted_ride_counts: list[float] = Field(min_length=24, max_length=24)
+
+
+def prediction_response(origin, predictions, model_name, model_version) -> PredictionResponse:
+    origin = instant(str(origin))
+    targets = pd.date_range(origin, periods=24, freq="h")
+    local = targets.tz_convert(LOCAL_ZONE)
+    return PredictionResponse(
+        origin=origin.tz_convert(LOCAL_ZONE).isoformat(), timezone=LOCAL_ZONE,
+        model_name=model_name, model_version=model_version,
+        target_timestamps_utc=[value.isoformat() for value in targets],
+        target_timestamps_local=[value.isoformat() for value in local],
+        utc_offsets=[value.strftime("%z")[:3] + ":" + value.strftime("%z")[3:] for value in local],
+        predicted_ride_counts=list(predictions))

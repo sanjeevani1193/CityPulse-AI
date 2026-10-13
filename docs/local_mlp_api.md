@@ -91,14 +91,15 @@ are rejected because they cannot distinguish repeated DST hours.
 
 Each record describes a completed hourly bucket by its **start** timestamp.
 `ride_count` must be a finite, nonnegative integer (no booleans, fractions or
-unknown values), at most 2^53 − 1. Send 168–8,760 observations in strictly
+unknown values), at most 2^53 − 1. For MLP/XGBoost send 168–8,760 observations in strictly
 increasing UTC order, with exactly one record per elapsed hour and no gaps.
 History must end at origin minus one elapsed hour. Duplicates are detected by
 instant, including two different offset representations of the same instant.
 All observations must be strictly before issuance. Unknown hours are never
 silently converted into zero demand; explicit zero counts must be recorded data.
 
-The 168-hour minimum is a deliberately simple contiguous contract covering both
+For LSTM, send at least 48 continuous hours; see [the worker guide](lstm_worker_api.md).
+The MLP/XGBoost 168-hour minimum is a deliberately simple contiguous contract covering both
 required lag windows. The feature builder actually consumes target minus 24
 and target minus 168 **elapsed** hours. All 48 source timestamps precede issuance;
 the horizon never uses actual counts inside the forecast period.
