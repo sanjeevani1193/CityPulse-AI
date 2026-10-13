@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 import hashlib
 import json
+import os
 from pathlib import Path
 
 import numpy as np
@@ -23,6 +24,8 @@ ARTIFACT_DIRECTORY = (Path(__file__).resolve().parents[3] / "outputs" /
 @dataclass(frozen=True)
 class ServingModel:
     forecaster: MLPForecaster
+    model_name: str = MODEL_NAME
+    model_version: str = MODEL_VERSION
 
     def predict(self, features):
         # Reuse the experiment's scaler/inverse transform and physical clipping.
@@ -34,12 +37,14 @@ class ServingModel:
         return predictions
 
 
-def load_serving_model(directory: Path = ARTIFACT_DIRECTORY) -> ServingModel:
+def load_serving_model(directory: Path | None = None) -> ServingModel:
     """Directory is developer configuration, never an HTTP request parameter.
 
     Fingerprints pin the trusted existing experiment; changed or missing files
     fail closed. There is no random-weight fallback or preprocessing fit.
     """
+    directory = Path(directory if directory is not None else
+                     os.environ.get("CITYPULSE_MLP_ARTIFACT_DIR", ARTIFACT_DIRECTORY))
     for name, expected in (("best_model.pt", CHECKPOINT_SHA256), ("experiment.json", RECORD_SHA256)):
         path = directory / name
         if not path.is_file() or path.is_symlink():

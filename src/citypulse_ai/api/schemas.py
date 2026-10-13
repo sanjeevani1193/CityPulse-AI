@@ -1,6 +1,7 @@
 """Strict hourly observation contract with explicit timestamp offsets."""
 
 import pandas as pd
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
 
 from citypulse_ai.forecasting.baselines import LOCAL_ZONE
@@ -28,6 +29,7 @@ class Observation(BaseModel):
 class PredictionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     origin: StrictStr
+    model: Literal["pytorch-mlp", "xgboost"] = "pytorch-mlp"
     history: list[Observation] = Field(min_length=168, max_length=8760)
 
     @model_validator(mode="after")

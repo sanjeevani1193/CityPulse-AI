@@ -48,13 +48,17 @@ Install the serving extra if needed (the existing local environment now has it):
 
 ```sh
 .venv/bin/python -m pip install -e '.[api,dev]'
+# Required macOS runtime setting for the optional XGBoost model at startup.
+export DYLD_LIBRARY_PATH="$PWD/.venv/lib/python3.14/site-packages/sklearn/.dylibs${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 PYTHONPATH=src .venv/bin/python -m uvicorn citypulse_ai.api.app:app \
   --host 127.0.0.1 --port 8000
 ```
 
 Run one worker for this first local service; each worker would load its own copy.
-This serving path does not import the native XGBoost library, so its OpenMP
-workaround is unnecessary. Interactive schemas are at `http://127.0.0.1:8000/docs`.
+Startup now also attempts to load XGBoost; use the documented per-process OpenMP
+setting above. If XGBoost cannot load, MLP remains available. Interactive schemas
+are at `http://127.0.0.1:8000/docs`. See [multi-model serving](multimodel_api.md)
+for `/models`, explicit selection and configurable trusted artifact directories.
 
 ```sh
 curl -s http://127.0.0.1:8000/health
