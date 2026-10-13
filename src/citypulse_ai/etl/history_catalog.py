@@ -124,7 +124,7 @@ def write_trip_partitions(connection, destination: Path, chunk_size: int) -> Non
                 writers[month].write_batch(subset)
 
 
-def create_reconciliation_relations(connection, entries: list[dict]) -> list[dict]:
+def create_reconciliation_relations(connection, entries: list[dict], *, duplicate_builder=None) -> list[dict]:
     """Shared SQL contract; relation lifetime belongs to the caller connection."""
     valid_queries, raw_queries, schema_audit = [], [], []
     for entry in entries:
@@ -152,11 +152,14 @@ def create_reconciliation_relations(connection, entries: list[dict]) -> list[dic
     connection.execute("CREATE VIEW locally_valid_trips AS " + " UNION ALL ".join(valid_queries))
     validate_required_values(connection)
     connection.execute("CREATE VIEW raw_ride_occurrences AS " + " UNION ALL ".join(raw_queries))
-    connection.execute("""CREATE TABLE duplicate_ids AS
-        SELECT normalized_ride_id, count(*) AS occurrences,
-               count(DISTINCT source_archive_month) AS archive_count
-        FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
-        GROUP BY normalized_ride_id HAVING count(*) > 1""")
+    if duplicate_builder is not None:
+        duplicate_builder(connection)
+    else:
+        connection.execute("""CREATE TABLE duplicate_ids AS
+            SELECT normalized_ride_id, count(*) AS occurrences,
+                   count(DISTINCT source_archive_month) AS archive_count
+            FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
+            GROUP BY normalized_ride_id HAVING count(*) > 1""")
     connection.execute("""CREATE VIEW canonical_trips AS
         SELECT t.*, strftime(started_at AT TIME ZONE 'America/New_York','%Y-%m') AS start_month
         FROM locally_valid_trips t WHERE NOT EXISTS

@@ -13,6 +13,7 @@ from citypulse_ai.etl.history_catalog import (
     create_reconciliation_relations, reconciliation_report,
 )
 from citypulse_ai.etl.storage_state import output_receipts, revision_for, source_receipts
+from citypulse_ai.etl.partitioned_duplicates import build_partitioned_duplicates
 
 INPUT_NAMES = ("validated_trips.parquet", "rejected_trips.csv")
 FORMAT_VERSION = 1
@@ -119,17 +120,29 @@ def reconcile_temporary(output_root: Path, *, input_paths: dict[str, Path] | Non
                         raise FileNotFoundError(f"Restore verified {entry['month']}/{name} before reconciliation")
             parent.mkdir(parents=True, exist_ok=True)
             # An in-memory database avoids a separately growing on-disk database;
-            # engine disk usage is confined to the explicitly bounded spill path.
+            # projections and engine spill share the explicitly bounded scratch budget.
             check_disk(parent, spill_limit_bytes, reserve_bytes)
             started = perf_counter()
+            # The existing scratch ceiling covers both ID projections and spill.
+            partition_budget = spill_limit_bytes // 2
+            engine_spill_budget = spill_limit_bytes - partition_budget
+            partitions = 2
+            while partitions < (sum(entry["input_rows"] for entry in entries) + 249_999) // 250_000:
+                partitions *= 2
+            duplicate_execution = {}
             with TemporaryDirectory(prefix="reconciliation-", dir=parent) as work:
                 with duckdb.connect(":memory:", config={
                     "memory_limit": memory_limit, "threads": 2,
                     "temp_directory": str(Path(work) / "spill"),
-                    "max_temp_directory_size": f"{spill_limit_bytes}B",
+                    "max_temp_directory_size": f"{engine_spill_budget}B",
                 }) as connection:
                     connection.execute("SET TimeZone = 'UTC'")
-                    schemas = create_reconciliation_relations(connection, resolved_entries)
+                    def duplicate_builder(engine):
+                        duplicate_execution.update(build_partitioned_duplicates(
+                            engine, Path(work) / "ids", partition_count=partitions,
+                            disk_budget_bytes=partition_budget, reserve_bytes=reserve_bytes))
+                    schemas = create_reconciliation_relations(
+                        connection, resolved_entries, duplicate_builder=duplicate_builder)
                     observed = dict(connection.execute(
                         "SELECT source_archive_month,count(*) FROM raw_ride_occurrences "
                         "GROUP BY source_archive_month").fetchall())
@@ -169,7 +182,9 @@ def reconcile_temporary(output_root: Path, *, input_paths: dict[str, Path] | Non
                        "mode": "temporary_audit_only", "persistent_catalog_modified": False,
                        "execution": {"database": ":memory:", "memory_limit": memory_limit,
                                      "spill_limit_bytes": spill_limit_bytes,
-                                     "duckdb_version": duckdb.__version__},
+                                     "duckdb_version": duckdb.__version__,
+                                     "duplicates": duplicate_execution,
+                                     "engine_spill_limit_bytes": engine_spill_budget},
                        "cloud_evidence": "recorded full-content receipts; live generations not checked here"}
             write_json(target, {"sha256": revision_for(payload), "payload": payload})
             return {"audit_path": str(target), "revision": revision, "resumed": False, **report}

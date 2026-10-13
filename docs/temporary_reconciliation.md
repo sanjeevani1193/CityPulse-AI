@@ -71,7 +71,7 @@ read-only to this function. Reports must be outside input directories and the
 temporary workspace parent; callers must also keep the report root outside any
 larger run directory they intend to clean up.
 
-An exclusively created child workspace contains bounded engine spill files; the
+An exclusively created child workspace contains bounded ID projections and engine spill files; the
 DuckDB database itself is in memory and is never written to a database file.
 All relations disappear when its connection closes and that child is removed.
 Only this function's newly created engine scratch is automatically removed,
@@ -129,8 +129,9 @@ verification or restoration. A completed audit alone never authorizes cleanup.
 ## Resource limits and June readiness
 
 The memory default remains `512MB`; this mode does not increase it. The explicit
-spill ceiling defaults to 4 GiB (`--reconciliation-spill-gib`). Before opening the
-engine, preflight requires the spill budget plus the configured reserve (default
+scratch ceiling defaults to 4 GiB (`--reconciliation-spill-gib`). Half is reserved
+for compressed duplicate-ID projections and half for engine spill. Before opening the
+engine, preflight requires the full scratch budget plus the configured reserve (default
 5 GiB) on the engine filesystem. There is no separately growing engine database
 file and no canonical Parquet export in temporary mode. This bounds engine spill
 usage, not total process RAM or other pipeline stages. Raw extraction,
@@ -188,3 +189,39 @@ source caches or run workspaces. A completion receipt/pointer can be promoted
 only after every artifact is verified. Old snapshots and their dependencies
 must remain intact until an explicitly approved migration verifies replacement
 and recovery. No canonical snapshot was built or uploaded for this task.
+
+## Bounded global duplicate recovery
+
+Temporary mode scans all registered accepted Parquet rows and rejected CSV rows
+once to project only the existing trimmed nonempty ride IDs and archive months.
+It routes these projections by the first 64 bits of MD5, using at least two
+partitions and doubling the partition count until the average is at most 250,000
+input occurrences. MD5 only chooses a partition: aggregation compares original
+full normalized strings, so hash collisions cannot introduce false duplicates.
+Case sensitivity, whitespace normalization, within-source duplicates,
+nonadjacent cross-archive duplicates, and rejection of every occurrence are
+unchanged. Persistent catalog construction retains its original SQL path.
+
+Arrow batches contain at most 50,000 rows. Each partition is then processed with
+the original `count(*)` and `count(DISTINCT source_archive_month)` expressions.
+Partition bytes, limits and strategy are recorded in the audit. Projections and
+spill are owned reproducible scratch and disappear with the temporary workspace.
+No source or processed input is removed. The data identity/version is unchanged
+because this changes physical execution, not reconciliation semantics. Existing
+matching complete audits remain reusable; an interrupted attempt restarts from
+verified inputs rather than trusting partial partitions.
+
+For June recovery use `--memory-limit 512MB --reserve-gib 12` with the existing
+4 GiB scratch ceiling. Free space is checked before execution and during every
+projection batch and partition. The caller should also monitor the complete run
+and interrupt above the reserve if other processes consume storage. DuckDB's
+memory setting is not a total Python process RSS cap. No memory increase or
+fallback to approximate/adjacent-month duplicate checks occurs on failure.
+
+Partitioning reduces aggregate state as history grows, but runtime and projected
+scratch grow with the full history; disk preflight remains required each time.
+Highly skewed partitions or a very large duplicate-result table can still exhaust
+the fixed memory limit. Later station-hour aggregation also retains the existing
+512 MB engine limit. These failures stop the audit without publishing incomplete
+counts. Full 24-month scalability requires measurement, not an assumption based
+on one successful June run.

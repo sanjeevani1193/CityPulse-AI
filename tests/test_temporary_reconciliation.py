@@ -49,8 +49,8 @@ def test_temporary_counts_duplicates_precision_and_persistent_compatibility(back
     existing = {p: fingerprint(p) for p in root.rglob("*") if p.is_file()}
     source_hashes = {p: fingerprint(p) for folder in folders for p in folder.iterdir() if p.is_file()}
     original = temporary.create_reconciliation_relations
-    def inspect(connection, entries):
-        schemas = original(connection, entries)
+    def inspect(connection, entries, **kwargs):
+        schemas = original(connection, entries, **kwargs)
         row = connection.execute("SELECT start_station_id,started_at_utc_ns FROM canonical_trips").fetchone()
         assert row == ("6569.09_", 1740805199123456789)
         return schemas
@@ -82,9 +82,14 @@ def test_temporary_counts_duplicates_precision_and_persistent_compatibility(back
     assert bundle["payload"]["manifest_snapshot"] == historical.load_manifest(root)
     assert bundle["sha256"] == temporary.revision_for(bundle["payload"])
     assert bundle["payload"]["persistent_catalog_modified"] is False
-    assert bundle["payload"]["execution"] == {
+    execution = bundle["payload"]["execution"]
+    assert execution["duplicates"]["projected_occurrences"] == 5
+    assert execution["duplicates"]["partition_count"] == 2
+    assert execution["duplicates"]["partition_bytes"] < 1024**2 // 2
+    assert {key: value for key, value in execution.items() if key != "duplicates"} == {
         "database": ":memory:", "memory_limit": "512MB",
-        "spill_limit_bytes": 1024**2, "duckdb_version": duckdb.__version__}
+        "spill_limit_bytes": 1024**2, "duckdb_version": duckdb.__version__,
+        "engine_spill_limit_bytes": 1024**2 // 2}
     assert bundle["payload"]["provenance"]["2025-02"]["source_backup"]["status"] == "published"
     assert store.mock_calls == []
 
@@ -230,8 +235,8 @@ def test_workspace_resource_config_and_source_count_mismatch(backed_history, tmp
         return original_connect(*args, **kwargs)
     monkeypatch.setattr(temporary.duckdb, "connect", connect)
     original_relations = temporary.create_reconciliation_relations
-    def mismatch(connection, entries):
-        schemas = original_relations(connection, entries)
+    def mismatch(connection, entries, **kwargs):
+        schemas = original_relations(connection, entries, **kwargs)
         # A manifest-consistent receipt is not proof that its claimed row count
         # matches the underlying data: execute and check every source partition.
         connection.execute("CREATE OR REPLACE VIEW raw_ride_occurrences AS "
@@ -241,7 +246,7 @@ def test_workspace_resource_config_and_source_count_mismatch(backed_history, tmp
     with pytest.raises(ValueError, match="Source counts differ"):
         audit(root, tmp_path)
     assert configs[0]["memory_limit"] == "512MB"
-    assert configs[0]["max_temp_directory_size"] == "1048576B"
+    assert configs[0]["max_temp_directory_size"] == "524288B"
     assert not list((tmp_path / "scratch").iterdir())
 
 
