@@ -816,3 +816,9 @@ request examples, elapsed-hour/DST semantics and exploratory-model limitations.
 configuration and artifact-free gateway and TensorFlow worker contracts on
 pushes to `main` and pull requests targeting `main`. Trained-model parity remains
 a separate local check; CI does not train models, build images or deploy services.
+
+## Local experiment tracking
+
+[Local MLflow tracking](docs/local_mlflow_tracking.md) imports existing preliminary
+baseline, XGBoost, MLP and LSTM results into an isolated, metadata-only local store.
+It does not retrain models or copy checkpoints and datasets.

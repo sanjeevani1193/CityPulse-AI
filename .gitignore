@@ -227,6 +227,7 @@ __marimo__/
 !tests/fixtures/*.csv
 .venv/
 .venv-tensorflow*/
+.venv-mlflow/
 .ipynb_checkpoints/
 *.duckdb
 *.duckdb.wal
