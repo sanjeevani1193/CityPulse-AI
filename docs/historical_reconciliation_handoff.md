@@ -1,5 +1,68 @@
 # Historical reconciliation handoff
 
+## Current verified result — 2026-10-14
+
+The correlated-filter fix completed one controlled reconciliation at **512 MB**.
+The verified duplicate checkpoint was reused: zero duplicate IDs across all eight
+archives and 24,007,009 occurrences. All 245 daily partitions and global checks
+passed: 23,993,387 accepted, 13,622 rejected, 5,876,513 station-hours, and zero
+duplicate station-hour keys. May is boundary-reconciled at **4,133,356** for the
+current source checkpoint; June remains provisional at **4,780,481** until July.
+
+Temporary mode omits exclusion only for a fully verified empty duplicate result;
+otherwise it uses an explicit anti join. Source/occurrence coverage, hashes,
+identity and actual duplicate-table invariants are checked before selection.
+Both optimized EXPLAIN plans eliminate the correlated DELIM/ride-ID grouping;
+persistent catalog behavior is unchanged. 210 relevant regression tests passed.
+
+The cached rerun returned identical audit bytes/results without opening DuckDB.
+All original inputs, manifests, snapshots and ten persistent view bindings remain
+unchanged. Peak RSS was 174.17 MiB, no engine spill was observed, retained
+checkpoints were 17.79 MiB, and free disk stayed above 29.89 GiB. Swap allocation
+stayed at 3 GiB. No new GCS operations, ingestion, downloads, memory increases,
+commits or pushes occurred.
+
+Evidence: `outputs/historical/june-2024-duplicate-filter-fix/report.md` and the
+content-addressed final audit under `outputs/historical/reconciliation-audits/`.
+This milestone preserves the verified implementation. Future source sets require a fresh global
+audit and resource preflight; large nonzero duplicate tables can still exhaust
+512 MB. Existing canonical local-file dependencies and checkpoint retention
+remain separate follow-up work. The failure notes below are historical and are
+superseded by this verified result.
+
+## Update — 2026-10-14
+
+Daily UTC station-hour aggregation and checksummed restart checkpoints are now
+implemented and tested. The single controlled full attempt still failed at 512 MB
+while discovering canonical UTC-day subtotals, before any daily file completed.
+Its compile-only EXPLAIN reveals `LEFT_DELIM_JOIN` and an additional ride-ID
+`HASH_GROUP_BY` from the correlated canonical `NOT EXISTS` filter. This is the
+remaining unbounded operator, not the daily aggregation itself.
+
+The independently retained duplicate audit now verifies **0 duplicate IDs and
+0 cross-archive duplicate IDs across 24,007,009 occurrences in eight archives**.
+Per-source accepted/rejected totals also survived. May is still not finalized;
+June remains provisional; no completed canonical audit was published. All inputs,
+manifests, snapshots and ten persistent view bindings remain unchanged.
+
+Next: test an explicit anti join (or equivalent exact non-correlated lookup) in
+**temporary mode**, compare it with original rejection semantics and confirm its
+plan avoids ride-ID delim grouping. Review other canonical scans and report
+queries too. Preserve persistent catalog behavior. Do not repeat full recovery
+until this fix, tests and fresh disk preflight pass; today's one attempt is used.
+The new checkpoints can reuse the duplicate phase after verifying input hashes.
+Keep 512 MB and at least 15 GiB free, with a monitored margin.
+
+198 relevant tests passed; the final focused rerun passed 30 tests. Observed peak
+process RSS was 1.044 GiB, peak scratch plus checkpoints 1.749 GiB, and minimum
+free space 28.559 GiB. During this session allocated OS swap grew from 2 to 3 GiB;
+the exact cause of yesterday's free-space change cannot be proven retrospectively.
+Full evidence is in `outputs/historical/june-2024-bounded-completion/`, including
+`failed-query-plan.txt`. No GCS access, data deletion, retry or memory increase.
+
+The following records the original 2026-10-13 checkpoint; restart details above
+and in `temporary_reconciliation.md` supersede its no-intermediate-checkpoint note.
+
 ## Completed
 
 June 2024 source ingestion and validation completed, and its artifacts have

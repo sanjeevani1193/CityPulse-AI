@@ -14,9 +14,28 @@ from citypulse_ai.etl.history_catalog import (
 )
 from citypulse_ai.etl.storage_state import output_receipts, revision_for, source_receipts
 from citypulse_ai.etl.partitioned_duplicates import build_partitioned_duplicates
+from citypulse_ai.etl.reconciliation_checkpoints import Checkpoints
+from citypulse_ai.etl.bounded_hourly import build_hourly
+from citypulse_ai.etl.history_catalog import sql_literal, create_canonical_trip_view
 
 INPUT_NAMES = ("validated_trips.parquet", "rejected_trips.csv")
 FORMAT_VERSION = 1
+
+
+def validate_duplicate_result(connection, evidence: dict) -> None:
+    """Check persisted audit claims against its actual, content-verified result."""
+    schema = [(row[0], row[1]) for row in connection.execute('DESCRIBE duplicate_ids').fetchall()]
+    if schema != [('normalized_ride_id','VARCHAR'), ('occurrences','BIGINT'), ('archive_count','BIGINT')]:
+        raise ValueError('Duplicate checkpoint schema differs')
+    count, cross, unique, invalid = connection.execute("""SELECT count(*),
+        count(*) FILTER(WHERE archive_count>1),count(DISTINCT normalized_ride_id),
+        count(*) FILTER(WHERE normalized_ride_id IS NULL OR normalized_ride_id=''
+          OR normalized_ride_id<>trim(normalized_ride_id) OR occurrences IS NULL
+          OR occurrences<2 OR archive_count IS NULL OR archive_count<1 OR archive_count>occurrences)
+        FROM duplicate_ids""").fetchone()
+    if (invalid or unique != count or count != evidence.get('duplicate_ride_ids')
+            or cross != evidence.get('cross_archive_duplicate_ride_ids')):
+        raise ValueError('Duplicate checkpoint counts or result integrity differ')
 
 
 def reconcile_temporary(output_root: Path, *, input_paths: dict[str, Path] | None = None,
@@ -124,12 +143,16 @@ def reconcile_temporary(output_root: Path, *, input_paths: dict[str, Path] | Non
             check_disk(parent, spill_limit_bytes, reserve_bytes)
             started = perf_counter()
             # The existing scratch ceiling covers both ID projections and spill.
-            partition_budget = spill_limit_bytes // 2
-            engine_spill_budget = spill_limit_bytes - partition_budget
+            partition_budget = spill_limit_bytes // 4
+            checkpoint_budget = spill_limit_bytes // 4
+            engine_spill_budget = spill_limit_bytes - partition_budget - checkpoint_budget
+            checkpoints = Checkpoints(reports / 'checkpoints' / revision, revision,
+                                      checkpoint_budget, reserve_bytes)
             partitions = 2
             while partitions < (sum(entry["input_rows"] for entry in entries) + 249_999) // 250_000:
                 partitions *= 2
             duplicate_execution = {}
+            hourly_validation = None
             with TemporaryDirectory(prefix="reconciliation-", dir=parent) as work:
                 with duckdb.connect(":memory:", config={
                     "memory_limit": memory_limit, "threads": 2,
@@ -138,11 +161,66 @@ def reconcile_temporary(output_root: Path, *, input_paths: dict[str, Path] | Non
                 }) as connection:
                     connection.execute("SET TimeZone = 'UTC'")
                     def duplicate_builder(engine):
+                        source_stage = checkpoints.load('source-counts')
+                        saved = checkpoints.load('duplicates')
+                        if saved is not None and source_stage is None:
+                            raise ValueError('Duplicate checkpoint lacks verified source coverage')
+                        if source_stage is None:
+                            raw = dict(engine.execute('SELECT source_archive_month,count(*) '
+                                'FROM raw_ride_occurrences GROUP BY 1').fetchall())
+                            valid = dict(engine.execute('SELECT source_archive_month,count(*) '
+                                'FROM locally_valid_trips GROUP BY 1').fetchall())
+                            for entry in entries:
+                                if (raw.get(entry['month'], 0) != entry['input_rows']
+                                        or valid.get(entry['month'], 0) != entry['accepted_rows']):
+                                    raise ValueError('Source counts differ from manifest')
+                            source_stage = checkpoints.save('source-counts', {'input': raw, 'accepted': valid,
+                                'rejected': {month: count-valid.get(month, 0) for month,count in raw.items()}})
+                        expected = {kind: {entry['month']: entry[field] for entry in entries}
+                                    for kind, field in [('input','input_rows'), ('accepted','accepted_rows'),
+                                                        ('rejected','rejected_rows')]}
+                        if source_stage['data'] != expected:
+                            raise ValueError('Duplicate checkpoint source coverage differs from manifest')
+                        nonempty = engine.execute("SELECT count(*) FROM raw_ride_occurrences "
+                                                  "WHERE normalized_ride_id <> ''").fetchone()[0]
+                        if saved is not None:
+                            if saved['data'].get('projected_occurrences') != nonempty:
+                                raise ValueError('Duplicate checkpoint occurrence coverage differs from inputs')
+                            if len(saved['files']) != 1:
+                                raise ValueError('Duplicate checkpoint must contain exactly one result file')
+                            path = checkpoints.root / saved['files'][0]['name']
+                            engine.execute('CREATE TABLE duplicate_ids AS SELECT * FROM read_parquet('
+                                           + sql_literal(path) + ', hive_partitioning=false)')
+                            duplicate_execution.update(saved['data'])
+                            validate_duplicate_result(engine, duplicate_execution)
+                            duplicate_execution['checkpoint_reused'] = True
+                            return
                         duplicate_execution.update(build_partitioned_duplicates(
                             engine, Path(work) / "ids", partition_count=partitions,
                             disk_budget_bytes=partition_budget, reserve_bytes=reserve_bytes))
+                        count, cross = engine.execute('SELECT count(*),count(*) FILTER '
+                            '(WHERE archive_count>1) FROM duplicate_ids').fetchone()
+                        duplicate_execution.update(duplicate_ride_ids=count,
+                                                   cross_archive_duplicate_ride_ids=cross)
+                        if duplicate_execution['projected_occurrences'] != nonempty:
+                            raise ValueError('Duplicate audit occurrence coverage differs from inputs')
+                        validate_duplicate_result(engine, duplicate_execution)
+                        path = checkpoints.asset('duplicates')
+                        engine.execute('COPY duplicate_ids TO ' + sql_literal(path) + ' (FORMAT PARQUET)')
+                        checkpoints.save('duplicates', duplicate_execution, [path])
+                        duplicate_execution['checkpoint_reused'] = False
+                    def canonical_builder(engine):
+                        # Reached only after hash/identity, complete source coverage,
+                        # and actual duplicate-result invariants have passed.
+                        mode = 'verified_zero' if duplicate_execution['duplicate_ride_ids'] == 0 else 'anti'
+                        create_canonical_trip_view(engine, exclusion=mode)
+                        duplicate_execution['exclusion'] = mode
+                    def hourly_builder(engine):
+                        nonlocal hourly_validation
+                        hourly_validation = build_hourly(engine, checkpoints)
                     schemas = create_reconciliation_relations(
-                        connection, resolved_entries, duplicate_builder=duplicate_builder)
+                        connection, resolved_entries, duplicate_builder=duplicate_builder,
+                        hourly_builder=hourly_builder, canonical_builder=canonical_builder)
                     observed = dict(connection.execute(
                         "SELECT source_archive_month,count(*) FROM raw_ride_occurrences "
                         "GROUP BY source_archive_month").fetchall())
@@ -154,7 +232,8 @@ def reconcile_temporary(output_root: Path, *, input_paths: dict[str, Path] | Non
                         if (observed.get(month, 0) != entry["input_rows"]
                                 or accepted.get(month, 0) != entry["accepted_rows"]):
                             raise ValueError(f"Source counts differ from manifest: {month}")
-                    report = reconciliation_report(connection, resolved_entries, manifest, schemas, started)
+                    report = reconciliation_report(connection, resolved_entries, manifest, schemas, started,
+                                                   hourly_validation=hourly_validation)
                     report["source_counts"] = {entry["month"]: {
                         "input_rows": observed.get(entry["month"], 0),
                         "locally_accepted_rows": accepted.get(entry["month"], 0),
@@ -184,6 +263,9 @@ def reconcile_temporary(output_root: Path, *, input_paths: dict[str, Path] | Non
                                      "spill_limit_bytes": spill_limit_bytes,
                                      "duckdb_version": duckdb.__version__,
                                      "duplicates": duplicate_execution,
+                                     "checkpoint_budget_bytes": checkpoint_budget,
+                                     "checkpoint_root": str(checkpoints.root),
+                                     "hourly_strategy": "disjoint_utc_days",
                                      "engine_spill_limit_bytes": engine_spill_budget},
                        "cloud_evidence": "recorded full-content receipts; live generations not checked here"}
             write_json(target, {"sha256": revision_for(payload), "payload": payload})

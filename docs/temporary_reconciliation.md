@@ -1,7 +1,7 @@
 # Temporary historical reconciliation and recovery
 
 `--reconcile-temporary` is a standalone, offline audit mode. It runs the same
-cross-archive duplicate, count, station-hour and NYC start-month SQL as the
+cross-archive duplicate, count, station-hour and NYC start-month rules as the
 existing canonical catalog, using registered partitions or explicitly supplied
 restored directories. It retains a small JSON audit and never promotes a DuckDB
 database, canonical trip/hourly Parquet exports, `canonical/CURRENT.json`, or a
@@ -71,9 +71,10 @@ read-only to this function. Reports must be outside input directories and the
 temporary workspace parent; callers must also keep the report root outside any
 larger run directory they intend to clean up.
 
-An exclusively created child workspace contains bounded ID projections and engine spill files; the
-DuckDB database itself is in memory and is never written to a database file.
-All relations disappear when its connection closes and that child is removed.
+An exclusively created child workspace contains bounded ID projections and engine
+spill files. The DuckDB database is in memory. Verified duplicate results and
+hourly partitions survive separately under the report root for recovery. Engine
+relations disappear when its connection closes and its child workspace is removed.
 Only this function's newly created engine scratch is automatically removed,
 including after Python exceptions or interruption. Input Parquets, rejection
 CSVs, other scratch directories, old datasets and source archives are never
@@ -116,8 +117,9 @@ change; retain the code revision/environment alongside audit metadata for replay
 Repeated execution reuses a complete matching audit even after temporary inputs
 have been removed. Surviving inputs must still hash correctly. Changed or corrupt
 audit files are refused and preserved, not overwritten. Interrupted computation
-without a completed audit restarts from verified inputs; there is no partial SQL
-checkpoint. The full manifest is checked for concurrent changes before publication.
+without a completed audit reuses independently verified stage checkpoints after
+rechecking input hashes. SQL connections themselves are never checkpointed. The
+full manifest is checked for concurrent changes before publication.
 
 Receipt validation is offline. It checks complete sets, publication identities,
 sizes, positive generations, source hashes and recorded full downloaded-byte
@@ -130,7 +132,8 @@ verification or restoration. A completed audit alone never authorizes cleanup.
 
 The memory default remains `512MB`; this mode does not increase it. The explicit
 scratch ceiling defaults to 4 GiB (`--reconciliation-spill-gib`). Half is reserved
-for compressed duplicate-ID projections and half for engine spill. Before opening the
+for engine spill; one quarter is reserved for compressed duplicate-ID projections
+and one quarter for retained checkpoints. Before opening the
 engine, preflight requires the full scratch budget plus the configured reserve (default
 5 GiB) on the engine filesystem. There is no separately growing engine database
 file and no canonical Parquet export in temporary mode. This bounds engine spill
@@ -204,12 +207,12 @@ unchanged. Persistent catalog construction retains its original SQL path.
 
 Arrow batches contain at most 50,000 rows. Each partition is then processed with
 the original `count(*)` and `count(DISTINCT source_archive_month)` expressions.
-Partition bytes, limits and strategy are recorded in the audit. Projections and
-spill are owned reproducible scratch and disappear with the temporary workspace.
+Partition bytes, limits and strategy are recorded in the audit. ID projections and
+spill are owned reproducible scratch and disappear with the temporary workspace. Verified duplicate results are retained as checkpoints.
 No source or processed input is removed. The data identity/version is unchanged
 because this changes physical execution, not reconciliation semantics. Existing
-matching complete audits remain reusable; an interrupted attempt restarts from
-verified inputs rather than trusting partial partitions.
+matching complete audits remain reusable; an interrupted attempt verifies input
+hashes and checkpoint integrity before reusing completed stages. Uncommitted partition files are never reused.
 
 For June recovery use `--memory-limit 512MB --reserve-gib 12` with the existing
 4 GiB scratch ceiling. Free space is checked before execution and during every
@@ -221,7 +224,108 @@ fallback to approximate/adjacent-month duplicate checks occurs on failure.
 Partitioning reduces aggregate state as history grows, but runtime and projected
 scratch grow with the full history; disk preflight remains required each time.
 Highly skewed partitions or a very large duplicate-result table can still exhaust
-the fixed memory limit. Later station-hour aggregation also retains the existing
-512 MB engine limit. These failures stop the audit without publishing incomplete
+the fixed memory limit. Station-hour aggregation also retains the existing 512 MB engine limit and
+uses the disjoint daily strategy below. These failures stop the audit without publishing incomplete
 counts. Full 24-month scalability requires measurement, not an assumption based
 on one successful June run.
+
+
+## Daily station-hour checkpoints
+
+Temporary mode groups one elapsed UTC day at a time across **all** source archives,
+then writes the original four-column hourly schema to Parquet. A station/hour can
+only belong to one UTC day; NYC `start_month` still comes from the original trip
+instant. Boundary rides from adjacent source archives are combined before counting.
+Repeated local DST hours remain separate UTC hours; no hours or labels are filled.
+The existing rule rejects every occurrence of duplicate ride IDs; there is no winner
+or new precedence rule. Persistent catalog building keeps its original SQL path.
+
+Each daily file is checked for expected accepted ride totals, positive counts,
+nonempty exact station IDs, hour alignment, day bounds, NYC month, and exact
+station/hour uniqueness. Disjoint day ranges plus those local checks prove global
+uniqueness without constructing another history-wide distinct hash table. The
+union's row and ride totals are checked again before the shared final report.
+
+Under `checkpoints/<input-specification-SHA>/` the importer retains source counts,
+a full-ID duplicate-result Parquet and counts, canonical source/local-month and
+UTC-day subtotals, and completed daily Parquets. Checksummed versioned stage JSON
+records include file SHA-256, bytes and partition counts. These are intermediate
+results, not final canonical publication. They remain useful if a later step fails.
+All original input hashes are checked before reuse. Completed daily files are
+rehashed and their actual invariants rechecked on resume. A completed matching final
+audit remains idempotent; no daily rows are appended or counted twice.
+
+An interrupted write without stage metadata is preserved and excluded from reads.
+Restart uses a new filename rather than overwriting it. Orphaned files count toward
+the per-input checkpoint quota; quota exhaustion stops safely and requires explicit
+review, never automatic deletion. Old input revisions are not reused for new source
+sets. Retained revisions consume disk, so later historical months still require
+preflight and an eventual explicitly approved checkpoint retention policy.
+
+With the default 4 GiB total budget: ID projections have 1 GiB, retained checkpoints
+1 GiB, and engine spill 2 GiB. Both report and workspace filesystems are checked.
+Checkpoints are budget-checked between partitions, and the controlled caller must
+monitor overall disk use with a margin above its minimum reserve. No fixed memory
+setting proves all future daily workloads fit; extreme station cardinality or a
+large duplicate-result table must fail safely rather than increase memory.
+
+
+### Controlled attempt status (2026-10-14)
+
+The daily algorithm passes synthetic equivalence, boundary, DST and interruption
+checks. The one full attempt failed **before** its daily loop, during canonical
+UTC-day subtotal discovery. EXPLAIN shows the inherited correlated `NOT EXISTS`
+expands to `LEFT_DELIM_JOIN` plus a hash grouping over ride IDs, introducing
+history-wide state even for a query with very few day groups. The next temporary
+mode change should test an explicit exact anti join that avoids this correlation;
+then review every canonical scan before another authorized full attempt.
+
+The duplicate checkpoint survived and verifies zero duplicates over all eight
+archives. No daily partition or complete canonical audit was produced. May is
+not finalized and June is provisional. Thus the full method is **not yet proven
+memory-safe** at 512 MB, despite passing the synthetic tests. Retain checkpoints
+and failure evidence; do not repeat the full run automatically.
+
+## Verified duplicate exclusion
+
+Temporary mode now removes the inherited correlated `NOT EXISTS` filter. Its
+replacement is chosen only after validating complete source-count coverage against
+the current manifest, input-specification identity, input file hashes, checkpoint
+metadata and result-file hashes. It also counts actual nonempty normalized ID
+occurrences and requires the audit's projected occurrence count to match. The
+loaded duplicate table must have the exact expected schema, unique nonempty trimmed
+IDs, valid occurrence/archive counts, and row/cross-archive counts matching the audit.
+
+If this verified result contains zero duplicate IDs, the canonical trip view reads
+locally accepted trips directly. If nonzero, an explicit `ANTI JOIN` excludes all
+occurrences whose trimmed ride ID matches a duplicate ID. Case sensitivity, exact
+stored ride/station strings, original timestamps, and output schemas are unchanged.
+There is no winning duplicate or new precedence policy. Persistent catalog building
+retains its original exclusion query.
+
+A missing duplicate stage causes a new exact audit; it never implies zero. A present
+but corrupt, mismatched or incomplete stage fails closed. A duplicate stage without
+its independently verified per-source coverage record is refused. SQL plan tests
+check that both temporary strategies remove `DELIM` operators and history-wide ID
+grouping, while matching original canonical rows and station-hour counts on fixtures.
+Large nonzero duplicate-result tables remain subject to the same 512 MB memory cap;
+correct semantics do not constitute a guarantee that every future workload fits.
+
+
+### Verified controlled result
+
+The subsequent correlated-filter fix completed one full attempt at 512 MB and
+reused the verified zero-duplicate checkpoint. The actual eight-archive plan has
+no DELIM operator under either optimized strategy; the original plan had one.
+All 245 daily partitions and final invariants passed: 23,993,387 accepted starts,
+13,622 rejected rows, 5,876,513 unique station-hours. May's boundary-reconciled
+count is 4,133,356 for this source set; June's 4,780,481 remains provisional.
+A cached rerun produced the identical audit without opening a database connection.
+
+210 relevant tests passed. Observed peak process RSS was 174.17 MiB; engine spill
+was zero, and retained checkpoints were approximately 17.79 MiB. Swap allocation
+remained 3 GiB and free space stayed above 29.89 GiB. These measurements apply to
+this run, which reused the duplicate audit; they do not measure a fresh full-history
+duplicate construction or establish resource safety for every future nonzero set.
+All original inputs, manifests and persistent snapshots remain unchanged. Detailed
+local evidence is under `outputs/historical/june-2024-duplicate-filter-fix/`.
