@@ -124,7 +124,23 @@ def write_trip_partitions(connection, destination: Path, chunk_size: int) -> Non
                 writers[month].write_batch(subset)
 
 
-def create_reconciliation_relations(connection, entries: list[dict]) -> list[dict]:
+def create_canonical_trip_view(connection, *, exclusion="correlated") -> None:
+    """Preserve selection; temporary callers may supply a verified exclusion mode."""
+    clauses = {
+        "correlated": "WHERE NOT EXISTS (SELECT 1 FROM duplicate_ids d "
+                      "WHERE d.normalized_ride_id = trim(t.ride_id))",
+        "anti": "ANTI JOIN duplicate_ids d ON d.normalized_ride_id = trim(t.ride_id)",
+        "verified_zero": "",
+    }
+    if exclusion not in clauses:
+        raise ValueError("Unknown duplicate exclusion mode")
+    connection.execute("CREATE VIEW canonical_trips AS SELECT t.*, "
+        "strftime(started_at AT TIME ZONE 'America/New_York','%Y-%m') AS start_month "
+        "FROM locally_valid_trips t " + clauses[exclusion])
+
+
+def create_reconciliation_relations(connection, entries: list[dict], *, duplicate_builder=None,
+                                    hourly_builder=None, canonical_builder=None) -> list[dict]:
     """Shared SQL contract; relation lifetime belongs to the caller connection."""
     valid_queries, raw_queries, schema_audit = [], [], []
     for entry in entries:
@@ -152,15 +168,18 @@ def create_reconciliation_relations(connection, entries: list[dict]) -> list[dic
     connection.execute("CREATE VIEW locally_valid_trips AS " + " UNION ALL ".join(valid_queries))
     validate_required_values(connection)
     connection.execute("CREATE VIEW raw_ride_occurrences AS " + " UNION ALL ".join(raw_queries))
-    connection.execute("""CREATE TABLE duplicate_ids AS
-        SELECT normalized_ride_id, count(*) AS occurrences,
-               count(DISTINCT source_archive_month) AS archive_count
-        FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
-        GROUP BY normalized_ride_id HAVING count(*) > 1""")
-    connection.execute("""CREATE VIEW canonical_trips AS
-        SELECT t.*, strftime(started_at AT TIME ZONE 'America/New_York','%Y-%m') AS start_month
-        FROM locally_valid_trips t WHERE NOT EXISTS
-        (SELECT 1 FROM duplicate_ids d WHERE d.normalized_ride_id = trim(t.ride_id))""")
+    if duplicate_builder is not None:
+        duplicate_builder(connection)
+    else:
+        connection.execute("""CREATE TABLE duplicate_ids AS
+            SELECT normalized_ride_id, count(*) AS occurrences,
+                   count(DISTINCT source_archive_month) AS archive_count
+            FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
+            GROUP BY normalized_ride_id HAVING count(*) > 1""")
+    if canonical_builder is None:
+        create_canonical_trip_view(connection)
+    else:
+        canonical_builder(connection)
     connection.execute("""CREATE VIEW canonical_rejections AS
         SELECT r.*, d.normalized_ride_id IS NOT NULL AS duplicate_ride_id,
             coalesce(d.archive_count > 1,false) AS cross_archive_duplicate,
@@ -170,10 +189,13 @@ def create_reconciliation_relations(connection, entries: list[dict]) -> list[dic
                  ELSE original_rejection_reasons END AS rejection_reasons
         FROM raw_ride_occurrences r LEFT JOIN duplicate_ids d USING(normalized_ride_id)
         WHERE NOT r.locally_valid OR d.normalized_ride_id IS NOT NULL""")
-    connection.execute("""CREATE TABLE hourly_rides AS
-        SELECT start_month,start_station_id,date_trunc('hour',started_at) AS hour_start,
-               count(*)::BIGINT AS ride_count FROM canonical_trips
-        GROUP BY start_month,start_station_id,hour_start""")
+    if hourly_builder is not None:
+        hourly_builder(connection)
+    else:
+        connection.execute("""CREATE TABLE hourly_rides AS
+            SELECT start_month,start_station_id,date_trunc('hour',started_at) AS hour_start,
+                   count(*)::BIGINT AS ride_count FROM canonical_trips
+            GROUP BY start_month,start_station_id,hour_start""")
     connection.execute("""CREATE VIEW model_window_hourly_rides AS
         SELECT * FROM hourly_rides
         WHERE hour_start >= TIMESTAMPTZ '2024-01-01 00:00:00 America/New_York'
@@ -182,12 +204,12 @@ def create_reconciliation_relations(connection, entries: list[dict]) -> list[dic
 
 
 def reconciliation_report(connection, entries: list[dict], manifest: dict,
-                          schema_audit: list[dict], started: float) -> dict:
+                          schema_audit: list[dict], started: float, *, hourly_validation=None) -> dict:
     """Apply the same global reconciliation and NYC start-month accounting."""
     inputs = sum(entry["input_rows"] for entry in entries)
     accepted = connection.execute("SELECT count(*) FROM canonical_trips").fetchone()[0]
     rejected_count = connection.execute("SELECT count(*) FROM canonical_rejections").fetchone()[0]
-    hourly_rows, starts, unique_keys = connection.execute("""
+    hourly_rows, starts, unique_keys = hourly_validation if hourly_validation is not None else connection.execute("""
         SELECT count(*),coalesce(sum(ride_count),0),count(DISTINCT(start_station_id,hour_start))
         FROM hourly_rides""").fetchone()
     if inputs != accepted + rejected_count or accepted != starts or hourly_rows != unique_keys:

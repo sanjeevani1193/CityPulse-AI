@@ -49,8 +49,8 @@ def test_temporary_counts_duplicates_precision_and_persistent_compatibility(back
     existing = {p: fingerprint(p) for p in root.rglob("*") if p.is_file()}
     source_hashes = {p: fingerprint(p) for folder in folders for p in folder.iterdir() if p.is_file()}
     original = temporary.create_reconciliation_relations
-    def inspect(connection, entries):
-        schemas = original(connection, entries)
+    def inspect(connection, entries, **kwargs):
+        schemas = original(connection, entries, **kwargs)
         row = connection.execute("SELECT start_station_id,started_at_utc_ns FROM canonical_trips").fetchone()
         assert row == ("6569.09_", 1740805199123456789)
         return schemas
@@ -82,9 +82,17 @@ def test_temporary_counts_duplicates_precision_and_persistent_compatibility(back
     assert bundle["payload"]["manifest_snapshot"] == historical.load_manifest(root)
     assert bundle["sha256"] == temporary.revision_for(bundle["payload"])
     assert bundle["payload"]["persistent_catalog_modified"] is False
-    assert bundle["payload"]["execution"] == {
+    execution = bundle["payload"]["execution"]
+    assert execution["duplicates"]["projected_occurrences"] == 5
+    assert execution["duplicates"]["partition_count"] == 2
+    assert execution["duplicates"]["partition_bytes"] < 1024**2 // 2
+    assert execution["checkpoint_budget_bytes"] == 1024**2 // 4
+    assert execution["hourly_strategy"] == "disjoint_utc_days"
+    assert {key: value for key, value in execution.items()
+            if key not in ("duplicates", "checkpoint_budget_bytes", "checkpoint_root", "hourly_strategy")} == {
         "database": ":memory:", "memory_limit": "512MB",
-        "spill_limit_bytes": 1024**2, "duckdb_version": duckdb.__version__}
+        "spill_limit_bytes": 1024**2, "duckdb_version": duckdb.__version__,
+        "engine_spill_limit_bytes": 1024**2 // 2}
     assert bundle["payload"]["provenance"]["2025-02"]["source_backup"]["status"] == "published"
     assert store.mock_calls == []
 
@@ -118,7 +126,7 @@ def test_interruption_cleans_only_owned_workspace_and_restarts(backed_history, t
     sentinel = tmp_path / "scratch" / "prior-data"
     sentinel.parent.mkdir(); sentinel.write_text("keep")
     original = temporary.reconciliation_report
-    def interrupted(*args):
+    def interrupted(*args, **kwargs):
         assert list(sentinel.parent.glob("reconciliation-*"))
         raise failure("simulated interruption")
     monkeypatch.setattr(temporary, "reconciliation_report", interrupted)
@@ -128,6 +136,8 @@ def test_interruption_cleans_only_owned_workspace_and_restarts(backed_history, t
     assert (root / "manifest.json").read_bytes() == before
     assert all((folder / "validated_trips.parquet").is_file() for folder in folders)
     monkeypatch.setattr(temporary, "reconciliation_report", original)
+    monkeypatch.setattr(temporary, "build_partitioned_duplicates",
+                        Mock(side_effect=AssertionError('Verified duplicates should be reused')))
     assert audit(root, tmp_path)["accepted_rows"] == 1
     assert sentinel.read_text() == "keep"
 
@@ -155,8 +165,8 @@ def test_incomplete_recovery_or_wrong_counts_refuses_audit(backed_history, tmp_p
 def test_changed_manifest_during_execution_does_not_publish_audit(backed_history, tmp_path, monkeypatch):
     root, _, _, _ = backed_history
     original = temporary.reconciliation_report
-    def changed(*args):
-        report = original(*args)
+    def changed(*args, **kwargs):
+        report = original(*args, **kwargs)
         manifest = historical.load_manifest(root); manifest["external_update"] = True
         write_json(root / "manifest.json", manifest)
         return report
@@ -230,8 +240,8 @@ def test_workspace_resource_config_and_source_count_mismatch(backed_history, tmp
         return original_connect(*args, **kwargs)
     monkeypatch.setattr(temporary.duckdb, "connect", connect)
     original_relations = temporary.create_reconciliation_relations
-    def mismatch(connection, entries):
-        schemas = original_relations(connection, entries)
+    def mismatch(connection, entries, **kwargs):
+        schemas = original_relations(connection, entries, **kwargs)
         # A manifest-consistent receipt is not proof that its claimed row count
         # matches the underlying data: execute and check every source partition.
         connection.execute("CREATE OR REPLACE VIEW raw_ride_occurrences AS "
@@ -241,7 +251,7 @@ def test_workspace_resource_config_and_source_count_mismatch(backed_history, tmp
     with pytest.raises(ValueError, match="Source counts differ"):
         audit(root, tmp_path)
     assert configs[0]["memory_limit"] == "512MB"
-    assert configs[0]["max_temp_directory_size"] == "1048576B"
+    assert configs[0]["max_temp_directory_size"] == "524288B"
     assert not list((tmp_path / "scratch").iterdir())
 
 
@@ -267,3 +277,71 @@ def test_mock_cloud_recovery_supplies_exact_temporary_inputs(backed_history, tmp
     ["--reconciliation-input", "2024-06=a", "--reconciliation-input", "2024-06=b"]])
 def test_cli_forbids_mixed_modes_and_invalid_overrides(options):
     with pytest.raises(SystemExit):historical_cli.main(["--reconcile-temporary", *options])
+
+
+def retain_stage_checkpoints(root, tmp_path, monkeypatch):
+    with monkeypatch.context() as context:
+        context.setattr(temporary, 'reconciliation_report', Mock(side_effect=RuntimeError('after stages')))
+        with pytest.raises(RuntimeError, match='after stages'):
+            audit(root, tmp_path)
+    return next((tmp_path / 'audits' / 'checkpoints').iterdir())
+
+
+def test_verified_zero_checkpoint_reuse_and_filter_plan(setup, tmp_path, monkeypatch):
+    root, raw, _, store, _ = setup
+    outputs(root, store); sources(root, raw, store)
+    stage = retain_stage_checkpoints(root, tmp_path, monkeypatch)
+    assert json.loads((stage / 'duplicates.json').read_text())['payload']['data']['duplicate_ride_ids'] == 0
+    monkeypatch.setattr(temporary, 'build_partitioned_duplicates',
+                        Mock(side_effect=AssertionError('must reuse completed audit')))
+    original = temporary.create_reconciliation_relations
+    def inspect(connection, entries, **kwargs):
+        result = original(connection, entries, **kwargs)
+        plan = connection.execute('EXPLAIN SELECT count(*) FROM canonical_trips').fetchone()[1]
+        assert 'DELIM' not in plan and 'HASH_GROUP_BY' not in plan
+        return result
+    monkeypatch.setattr(temporary, 'create_reconciliation_relations', inspect)
+    result = audit(root, tmp_path)
+    execution = json.loads(Path(result['audit_path']).read_text())['payload']['execution']['duplicates']
+    assert execution['checkpoint_reused'] is True
+    assert execution['exclusion'] == 'verified_zero'
+    assert result['accepted_rows'] == 2
+    assert audit(root, tmp_path)['resumed'] is True
+
+
+@pytest.mark.parametrize('bad', ['checksum','identity','coverage','false_zero','asset','missing_coverage','occurrences'])
+def test_checkpoint_fail_closed_before_filter(backed_history, tmp_path, monkeypatch, bad):
+    root, _, _, _ = backed_history
+    stage = retain_stage_checkpoints(root, tmp_path, monkeypatch)
+    path = stage / ('source-counts.json' if bad in ('coverage','missing_coverage') else 'duplicates.json')
+    bundle = json.loads(path.read_text())
+    if bad == 'asset':
+        asset = stage / bundle['payload']['files'][0]['name']
+        asset.write_bytes(b'corrupt parquet; preserve')
+    elif bad == 'missing_coverage':
+        path.rename(path.with_suffix('.preserved'))
+    else:
+        if bad == 'checksum':bundle['sha256'] = '0'*64
+        elif bad == 'identity':bundle['payload']['identity'] = 'different-input-manifest'
+        elif bad == 'coverage':bundle['payload']['data']['input'].pop('2025-02')
+        elif bad == 'false_zero':bundle['payload']['data'].update(duplicate_ride_ids=0,cross_archive_duplicate_ride_ids=0)
+        elif bad == 'occurrences':bundle['payload']['data']['projected_occurrences'] -= 1
+        if bad != 'checksum':bundle['sha256'] = temporary.revision_for(bundle['payload'])
+        path.write_text(json.dumps(bundle))
+    monkeypatch.setattr(temporary, 'build_hourly', Mock(side_effect=AssertionError('must fail before filtering')))
+    with pytest.raises(ValueError):audit(root, tmp_path)
+    assert not list((tmp_path / 'audits').glob('*.json'))
+
+
+def test_missing_interrupted_duplicate_checkpoint_recomputes_audit(backed_history, tmp_path, monkeypatch):
+    root, _, _, _ = backed_history
+    stage = retain_stage_checkpoints(root, tmp_path, monkeypatch)
+    path = stage / 'duplicates.json'
+    path.rename(path.with_suffix('.interrupted-preserved'))
+    original = temporary.build_partitioned_duplicates
+    fresh = Mock(wraps=original)
+    monkeypatch.setattr(temporary, 'build_partitioned_duplicates', fresh)
+    result = audit(root, tmp_path)
+    assert fresh.call_count == 1
+    assert result['cross_archive_duplicate_ride_ids'] == 2
+    assert result['accepted_rows'] == 1
