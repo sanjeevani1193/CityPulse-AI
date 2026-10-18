@@ -10,6 +10,11 @@ This is a deliberately narrow development policy, not an all-hour demand
 benchmark certificate. It leaves the final [TFT design](tft_station_forecasting_design.md)
 and its zero-acceptance requirements intact.
 
+The subsequent [accepted-recorded-starts policy](accepted_recorded_starts_labels.md)
+implements the explicitly scoped `accepted_recorded_starts_v1` target, including
+verified source-scoped zeros and separate rejection diagnostics. The positive-only
+policy and measurements below are retained as the earlier development version.
+
 ## Available evidence and its limits
 
 `StationHistory` verifies the completed temporary reconciliation audit, exact
