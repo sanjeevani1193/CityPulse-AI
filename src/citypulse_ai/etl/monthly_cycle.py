@@ -5,16 +5,13 @@ No bulk mode, persistent catalog creation, retention cleanup or automatic retry.
 """
 
 import argparse
-from contextlib import contextmanager
 from datetime import datetime, timezone
 import json
 import os
 from pathlib import Path
-import re
 import resource
 import shutil
 import signal
-import subprocess
 import tempfile
 import threading
 import time
@@ -30,6 +27,7 @@ from citypulse_ai.etl.temporary_reconciliation import reconcile_temporary
 from citypulse_ai.cloud.gcs import GCSStorage
 from citypulse_ai.cloud.historical import publish_month
 from citypulse_ai.cloud.retention import publish_sources, inspect_remote
+from citypulse_ai.etl.resource_monitor import snapshot, peak_rss_bytes
 
 GIB = 1024**3
 START_GATE = 28 * GIB  # General policy is unchanged; no lower-gate CLI switch.
@@ -96,6 +94,10 @@ def preflight(month, root, work, store, *, september_budget=False):
     before = inventory(root)
     source = discover_archive(month)
     source.update(inspect_archive(source))
+    recorded = before['manifest']['archives'].get(month, {}).get('source', {})
+    for key in ('etag', 'bytes', 'url'):
+        if key in recorded and recorded[key] != source.get(key):
+            raise ValueError('Recorded source identity changed; preserve retained files and investigate')
     # Same archive-derived 10x CSV envelope used by the historical planner.
     estimate = source['bytes'] + 9*source['csv_bytes']
     if estimate > WORKSPACE or source['bytes'] >= FILE_CAP:
@@ -241,16 +243,22 @@ class BoundedRuntime:
         write_json(self.report/'progress.json',self.metrics)
 
     def sample(self):
-        swap=subprocess.check_output(['/usr/sbin/sysctl','vm.swapusage'],text=True,timeout=5).strip()
-        rss=int(subprocess.check_output(['/bin/ps','-o','rss=','-p',str(os.getpid())],text=True,timeout=5).strip())*1024
-        return {'elapsed_seconds':time.monotonic()-self.started,'stage':self.metrics['stage'],
-            'swap':swap,'swap_allocated_bytes':float(re.search(r'total = ([0-9.]+)M',swap).group(1))*1024**2,
-            'rss_bytes':rss,'free_bytes':shutil.disk_usage(self.root).free,'workspace_bytes':self.workspace_bytes()}
+        return {**snapshot(), 'elapsed_seconds':time.monotonic()-self.started,
+            'stage':self.metrics['stage'], 'free_bytes':shutil.disk_usage(self.root).free,
+            'workspace_bytes':self.workspace_bytes()}
 
     def check(self, sample):
-        if (sample['free_bytes'] < 16*GIB or sample['workspace_bytes'] > int(9.5*GIB)
-                or sample['rss_bytes'] > 2*GIB or sample['swap_allocated_bytes']-self.initial_swap > 2*GIB):
-            raise RuntimeError('Free disk/workspace/RSS/swap safety threshold exceeded; no automatic retry')
+        limits = {
+            'free disk': sample['free_bytes'] < 16*GIB,
+            'workspace': sample['workspace_bytes'] > int(9.5*GIB),
+            'process RSS': sample['rss_bytes'] > 2*GIB,
+            'host swap allocation growth': sample['swap_allocated_bytes']-self.initial_swap > 2*GIB,
+            'host swap use growth': sample['swap_used_bytes']-self.initial_swap_used > 2*GIB,
+            'host memory pressure': sample['memory_pressure_unsafe'],
+        }
+        exceeded = [name for name, crossed in limits.items() if crossed]
+        if exceeded:
+            raise RuntimeError(', '.join(exceeded)+' safety threshold exceeded; no automatic retry')
 
     def monitor(self):
         last=0
@@ -280,8 +288,11 @@ class BoundedRuntime:
         hard=resource.getrlimit(resource.RLIMIT_FSIZE)[1]
         if hard != resource.RLIM_INFINITY and hard < FILE_CAP:
             raise ValueError('Existing OS file hard limit is below the required staging cap')
-        self.started=time.monotonic(); first=self.sample();self.initial_swap=first['swap_allocated_bytes'];self.check(first)
+        self.started=time.monotonic(); first=self.sample()
+        self.initial_swap=first['swap_allocated_bytes'];self.initial_swap_used=first['swap_used_bytes']
         self.metrics['samples'].append(first)
+        write_json(self.report/'resources-progress.json',self.metrics)
+        self.check(first)
         self.original_connect=duckdb.connect
         def connect(*args,**kwargs):
             if self.forbid_sql:raise AssertionError('Cached reconciliation unexpectedly opened SQL')
@@ -302,7 +313,7 @@ class BoundedRuntime:
         resource.setrlimit(resource.RLIMIT_FSIZE,self.old_limit);signal.signal(signal.SIGXFSZ,self.old_signal)
         self.metrics.update(elapsed_seconds=time.monotonic()-self.started,
             free_after_bytes=shutil.disk_usage(self.root).free,
-            peak_rss_bytes=max(self.metrics['peak_rss_bytes'],resource.getrusage(resource.RUSAGE_SELF).ru_maxrss),
+            peak_rss_bytes=max(self.metrics['peak_rss_bytes'],peak_rss_bytes()),
             retained_workspace_bytes=self.workspace_bytes())
         if error is not None:self.metrics['error']=repr(error)
         write_json(self.report/'resources.json',self.metrics)
@@ -325,16 +336,26 @@ def run_cycle(month, root, work, report, store, *, september_budget=False):
             # Check the preflight publisher version again before any download.
             from citypulse_ai.etl import historical
             original_discover=historical.discover_archive
+            original_download=historical.download_archive
             def pinned_discover(requested):
                 source=original_discover(requested)
                 if requested != month or any(source[k]!=plan['source'][k] for k in source):
                     raise ValueError('Official source version changed since preflight')
                 return source
             historical.discover_archive=pinned_discover
+            expected_sha = plan['manifest']['archives'].get(month, {}).get('source', {}).get('sha256')
+            def verified_download(source, directory):
+                path, digest = original_download(source, directory)
+                if expected_sha and digest != expected_sha:
+                    raise ValueError('Downloaded source differs from recorded SHA-256; no validation attempted')
+                return path, digest
+            historical.download_archive=verified_download
             try:
                 ingestion=process_month(month,work/'raw',root,chunk_size=50000,memory_limit='512MB',
                     reserve_bytes=RESERVE,cloud_store=store)
-            finally:historical.discover_archive=original_discover
+            finally:
+                historical.discover_archive=original_discover
+                historical.download_archive=original_download
             write_json(report/'ingestion.json',ingestion)
             entry=load_manifest(root)['archives'][month]
             # Bound actual publication volume before initiating any upload.

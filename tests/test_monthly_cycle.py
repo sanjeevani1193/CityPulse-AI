@@ -17,11 +17,14 @@ def test_general_start_gate_cannot_be_disabled(tmp_path,monkeypatch):
 
 
 def test_resource_checks_each_stop_without_retry(tmp_path):
-    guard=cycle.BoundedRuntime('2024-09',tmp_path,tmp_path/'work',tmp_path/'report');guard.initial_swap=0
-    base={'free_bytes':28*cycle.GIB,'workspace_bytes':0,'rss_bytes':100,'swap_allocated_bytes':0}
+    guard=cycle.BoundedRuntime('2024-09',tmp_path,tmp_path/'work',tmp_path/'report')
+    guard.initial_swap=guard.initial_swap_used=0
+    base={'free_bytes':28*cycle.GIB,'workspace_bytes':0,'rss_bytes':100,'swap_allocated_bytes':0,
+          'swap_used_bytes':0,'memory_pressure_unsafe':False}
     guard.check(base)
     for key,value in [('free_bytes',16*cycle.GIB-1),('workspace_bytes',10*cycle.GIB),
-                      ('rss_bytes',2*cycle.GIB+1),('swap_allocated_bytes',2*cycle.GIB+1)]:
+                      ('rss_bytes',2*cycle.GIB+1),('swap_allocated_bytes',2*cycle.GIB+1),
+                      ('swap_used_bytes',2*cycle.GIB+1),('memory_pressure_unsafe',True)]:
         with pytest.raises(RuntimeError,match='no automatic retry'):guard.check({**base,key:value})
 
 
@@ -123,3 +126,55 @@ def test_exact_source_candidates_are_reported_without_deletion(tmp_path,monkeypa
     assert all(c['approval_required'] for c in result['files']) and result['not_deleted']
     assert result['logical_bytes']==source.stat().st_size+csv.stat().st_size
     assert source.exists() and csv.exists()
+
+
+def test_recorded_source_version_change_stops_before_cloud(tmp_path,monkeypatch):
+    monkeypatch.setattr(cycle.shutil,'disk_usage',lambda p:SimpleNamespace(free=40*cycle.GIB))
+    monkeypatch.setattr(cycle,'inventory',lambda root:{'manifest':{'archives':{
+        '2024-09':{'source':{'etag':'original'}}}}})
+    monkeypatch.setattr(cycle,'discover_archive',lambda month:{'etag':'changed'})
+    monkeypatch.setattr(cycle,'inspect_archive',lambda source:{})
+    store=Mock()
+    with pytest.raises(ValueError,match='Recorded source identity'):
+        cycle.preflight('2024-09',tmp_path,tmp_path/'work',store)
+    store.bucket.reload.assert_not_called()
+
+
+def test_restored_source_hash_checked_before_validation(tmp_path,monkeypatch):
+    from citypulse_ai.etl import historical
+    root=tmp_path/'history';root.mkdir()
+    plan={'manifest':{'archives':{'2024-09':{'source':{'sha256':'a'*64}}}},
+        'month':'2024-09','free_before_bytes':40*cycle.GIB,'archive_envelope_bytes':0,
+        'cost_budget':{},'source':{}}
+    monkeypatch.setattr(cycle,'preflight',lambda *args,**kwargs:plan)
+    class Guard:
+        def __init__(self,*args):pass
+        def __enter__(self):return self
+        def __exit__(self,*args):pass
+        def stage(self,name):pass
+    monkeypatch.setattr(cycle,'BoundedRuntime',Guard)
+    download=Mock(return_value=(tmp_path/'retained.zip','b'*64))
+    monkeypatch.setattr(historical,'download_archive',download)
+    def incomplete_etl(*args,**kwargs):
+        # Existing process_month calls the guarded download before extraction
+        # and validation; a changed digest must abort here.
+        historical.download_archive({},tmp_path)
+        pytest.fail('Changed source reached validation')
+    monkeypatch.setattr(cycle,'process_month',incomplete_etl)
+    publish=Mock();monkeypatch.setattr(cycle,'publish_month',publish)
+    with pytest.raises(ValueError,match='recorded SHA-256'):
+        cycle.run_cycle('2024-09',root,tmp_path/'work',tmp_path/'report',Mock())
+    assert historical.download_archive is download
+    publish.assert_not_called()
+
+
+def test_unsafe_initial_pressure_recorded_before_any_engine_is_opened(tmp_path,monkeypatch):
+    guard=cycle.BoundedRuntime('2024-09',tmp_path,tmp_path/'work',tmp_path/'report')
+    first={'swap_allocated_bytes':0,'swap_used_bytes':0,'memory_pressure_unsafe':True,
+        'rss_bytes':100,'free_bytes':40*cycle.GIB,'workspace_bytes':0}
+    monkeypatch.setattr(guard,'sample',lambda:first)
+    connect=Mock();monkeypatch.setattr(cycle.duckdb,'connect',connect)
+    with pytest.raises(RuntimeError,match='host memory pressure'):
+        with guard:pytest.fail('Unsafe host admitted')
+    connect.assert_not_called()
+    assert json.loads((tmp_path/'report/resources-progress.json').read_text())['samples']==[first]

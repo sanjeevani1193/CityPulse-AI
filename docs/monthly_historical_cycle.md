@@ -51,7 +51,8 @@ Runtime safeguards reproduce the August protections:
   9.5 GiB workspace or less than 16 GiB free; emergency exits are 10 GiB or less
   than 15.5 GiB free, protecting the required 15 GiB reserve with margins.
 - Process RSS/host swap are sampled every 10 seconds. RSS above 2 GiB or swap
-  allocation growth above 2 GiB stops the run. Samples are observations, not a
+  allocation or actual-use growth above 2 GiB stops the run. Unsafe host memory
+  pressure also stops before ingestion or during sampling. Samples are observations, not a
   continuous RAM guarantee or a filesystem quota.
 - Actual publication volume is checked against a 3 GiB cap before uploads;
   create-only uploads use one application attempt with SDK upload retries off.
@@ -85,3 +86,8 @@ September option; insufficient resources stop before downloading.
 Synthetic tests: `tests/test_monthly_cycle.py` plus existing historical,
 publication/recovery, duplicate, daily aggregation and catalog regression tests.
 No forecasting/model code is changed by this workflow.
+
+For Linux counter units, pressure thresholds, a separate VM working manifest,
+generation-pinned input restoration and checkpoint transfer, follow
+[the Linux operating procedure](linux_historical_etl.md). Original Mac catalogs
+are not portable backups and are not modified by VM recovery.
