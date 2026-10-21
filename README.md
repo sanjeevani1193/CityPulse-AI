@@ -1,19 +1,17 @@
-# CityPulse AI
 
-CityPulse AI is a portfolio-grade urban mobility demand forecasting and AI
-analytics platform built around NYC Citi Bike trip data and historical weather.
-The goal is to demonstrate an end-to-end workflow from validated source data to
-reproducible forecasts, interactive analytics, and statistical experimentation.
+CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science platform** for urban mobility demand forecasting using NYC Citi Bike data. It combines large-scale data engineering, time-series forecasting, deep learning, cloud infrastructure, and reproducible ML workflows.
 
-**Phase 1 is complete:** data engineering, ETL, data-quality review, and initial EDA.
-Phase 0, Phase 1.1, and the Phase 1.3 real-data ETL adaptation are implemented:
-a Python scaffold and a chunked multi-file CSV pipeline with validation, global
-duplicate checks, hourly counts, Parquet output, and a DuckDB table.
-Initial EDA in Jupyter includes saved ride counts, missing-value and
-duration checks, and an hourly-demand visualization for February 2025. Raw data
-stays local; only synthetic fixtures are committed. Phase 2.1 now prepares calendar grids, coverage audits, and chronological splits
-from the reviewed warehouse. Weather, model training, APIs, and deployment remain
-future work.
+### 🚀 Key Highlights
+
+- **Data Engineering:** Implemented memory-bounded ETL pipelines using Python, DuckDB, and Parquet, with validation and duplicate auditing. Reconciled over 7 million records across three processed source archives.
+- **Machine Learning:** Developed and evaluated five forecasting approaches, including XGBoost, PyTorch MLP, and TensorFlow LSTM, with a preliminary **18.1% reduction in test MAE** against a daily seasonal baseline.
+- **Model Serving:** Built local FastAPI-based model inference workflows with Docker support and model-specific preprocessing.
+- **MLOps & Cloud:** Integrated MLflow experiment tracking, automated GitHub Actions CI, and Google Cloud Storage with verified artifact transfers.
+
+**Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
+
+**Current Status:** Core data engineering, initial forecasting experiments, local inference, and MLOps workflows are implemented. Historical data expansion, weather integration, SQLPilot, ExperimentLab, and further deployment capabilities remain in development.
+
 
 ## Architecture overview
 
