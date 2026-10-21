@@ -348,3 +348,31 @@ new historical dataset or change checkpoint identity or canonical rules.
 The regression scans 24 synthetic source partitions at 512 MB and compares their
 rejected values with the original reader applied one file at a time, including
 embedded delimiters/newlines, leading-zero IDs and cross-source duplicates.
+
+### Duplicate projection metadata and process RSS
+
+May 2025 stopped at the existing 2 GiB process-RSS safeguard while aggregating
+the hash partitions. The algorithm did not retain all IDs in Python: it streamed
+50,000-row batches and grouped exact full strings in one hash partition at a time.
+However, writing every small bucket slice created a Parquet row group for every
+input batch/bucket pair. Footer metadata grew with history, and the dictionary of
+closed native Parquet writers remained alive during DuckDB aggregation. DuckDB's
+512 MB engine limit does not bound all Arrow/native process allocations.
+
+ID projection now coalesces slices into 4,096-row Parquet groups. Shared pending
+Arrow slices are capped at 64 MiB between writes (plus the current input batch/slice
+and writer/codec overhead); the largest bucket is flushed if that byte cap is
+reached. Projection runs in its own scope, releasing readers, buffers and closed
+writers before aggregation. These are disposable ID projections only: original
+records, full-ID equality, duplicate exclusion, partition routing, source coverage,
+checkpoint identity, canonical schemas and the disk ceilings are unchanged.
+
+The process-RSS guard remains 2 GiB on both Mac and VM; no 3 GiB exception is used.
+This reduces metadata overhead rather than promising every future input fits.
+Regression tests check increasing archive counts, exact duplicate/no-duplicate
+results, writer destruction before scans, tiny batches and forced byte-cap flushing.
+In a 200,000-row, 24-source synthetic probe, peak RSS was about 190 MiB before and
+166 MiB after; projection bytes fell from 2,547,681 to 1,075,987. These are local
+fixture measurements, not a forecast of full-history memory usage. The initial
+writer-lifetime-only experiment did not reduce RSS, so lifetime isolation alone
+was not accepted as sufficient evidence for recovery.

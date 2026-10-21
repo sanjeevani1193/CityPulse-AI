@@ -5,9 +5,13 @@ from pathlib import Path
 
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
+import pyarrow as pa
 
 from citypulse_ai.etl.archives import check_disk
 from citypulse_ai.etl.history_catalog import sql_literal
+
+ID_ROW_GROUP_ROWS = 4096
+ID_BUFFER_BYTES = 64 * 1024**2
 
 
 def build_partitioned_duplicates(connection, workspace: Path, *, partition_count: int,
@@ -22,35 +26,13 @@ def build_partitioned_duplicates(connection, workspace: Path, *, partition_count
     """
     if partition_count < 1 or batch_size < 1 or disk_budget_bytes < 1:
         raise ValueError("Partition count, batch size and disk budget must be positive")
-    workspace.mkdir()
-    check_disk(workspace, disk_budget_bytes, reserve_bytes)
-    reader = connection.execute(f"""
-        SELECT normalized_ride_id, source_archive_month,
-               CAST('0x' || substr(md5(normalized_ride_id),1,16) AS UBIGINT)
-                   % {partition_count} AS bucket
-        FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
-    """).to_arrow_reader(batch_size=batch_size)
-    writers, paths, rows = {}, {}, 0
-    with ExitStack() as stack:
-        stack.callback(reader.close)
-        for batch in reader:
-            rows += batch.num_rows
-            for bucket in pc.unique(batch.column("bucket")).to_pylist():
-                subset = batch.filter(pc.equal(batch.column("bucket"), bucket)).select(
-                    ["normalized_ride_id", "source_archive_month"])
-                if bucket not in writers:
-                    paths[bucket] = workspace / f"ids-{bucket}.parquet"
-                    writers[bucket] = stack.enter_context(pq.ParquetWriter(
-                        paths[bucket], subset.schema, compression="zstd"))
-                writers[bucket].write_batch(subset)
-            # Leave room for Parquet footers and check the reserve every batch.
-            used = sum(path.stat().st_size for path in paths.values())
-            if used + len(paths) * 64 * 1024 > disk_budget_bytes:
-                raise ValueError("Duplicate partition scratch exceeded its disk budget")
-            check_disk(workspace, 0, reserve_bytes)
-    used = sum(path.stat().st_size for path in paths.values())
-    if used > disk_budget_bytes:
-        raise ValueError("Duplicate partition scratch exceeded its disk budget")
+    # Keep Arrow reader/writer lifetimes inside the projection phase. Closed
+    # ParquetWriter objects still retain native row-group/footer metadata;
+    # holding the writers dict while scanning every partition overlaps that
+    # history-sized metadata with DuckDB's aggregation allocations.
+    paths, rows, used = _project_ids(connection, workspace,
+        partition_count=partition_count, disk_budget_bytes=disk_budget_bytes,
+        reserve_bytes=reserve_bytes, batch_size=batch_size)
     connection.execute("CREATE TABLE duplicate_ids (normalized_ride_id VARCHAR, "
                        "occurrences BIGINT, archive_count BIGINT)")
     for bucket, path in sorted(paths.items()):
@@ -62,3 +44,56 @@ def build_partitioned_duplicates(connection, workspace: Path, *, partition_count
     return {"strategy": "md5_routed_full_id_grouping", "partition_count": partition_count,
             "projected_occurrences": rows, "partition_bytes": used,
             "partition_disk_budget_bytes": disk_budget_bytes}
+
+
+def _project_ids(connection, workspace, *, partition_count, disk_budget_bytes,
+                 reserve_bytes, batch_size):
+    """Stream bounded batches; release all native writers before aggregation."""
+    workspace.mkdir()
+    check_disk(workspace, disk_budget_bytes, reserve_bytes)
+    reader = connection.execute(f"""
+        SELECT normalized_ride_id, source_archive_month,
+               CAST('0x' || substr(md5(normalized_ride_id),1,16) AS UBIGINT)
+                   % {partition_count} AS bucket
+        FROM raw_ride_occurrences WHERE normalized_ride_id <> ''
+    """).to_arrow_reader(batch_size=batch_size)
+    writers, paths, rows = {}, {}, 0
+    buffers, buffered_rows, buffered_bytes = {}, {}, {}
+    def flush(bucket):
+        table = pa.Table.from_batches(buffers.pop(bucket))
+        writers[bucket].write_table(table, row_group_size=ID_ROW_GROUP_ROWS)
+        buffered_rows.pop(bucket)
+        buffered_bytes.pop(bucket)
+    with ExitStack() as stack:
+        stack.callback(reader.close)
+        for batch in reader:
+            rows += batch.num_rows
+            for bucket in pc.unique(batch.column("bucket")).to_pylist():
+                subset = batch.filter(pc.equal(batch.column("bucket"), bucket)).select(
+                    ["normalized_ride_id", "source_archive_month"])
+                if bucket not in writers:
+                    paths[bucket] = workspace / f"ids-{bucket}.parquet"
+                    writers[bucket] = stack.enter_context(pq.ParquetWriter(
+                        paths[bucket], subset.schema, compression="zstd"))
+                # Writing each tiny hash slice directly creates one Parquet
+                # row group per input batch per bucket. Footer metadata then
+                # grows with batch count, even though actual IDs are streamed.
+                # Coalesce slices, with a shared explicit Arrow byte ceiling.
+                buffers.setdefault(bucket, []).append(subset)
+                buffered_rows[bucket] = buffered_rows.get(bucket, 0) + subset.num_rows
+                buffered_bytes[bucket] = buffered_bytes.get(bucket, 0) + subset.nbytes
+                if buffered_rows[bucket] >= ID_ROW_GROUP_ROWS:
+                    flush(bucket)
+                while sum(buffered_bytes.values()) > ID_BUFFER_BYTES:
+                    flush(max(buffered_bytes, key=buffered_bytes.get))
+            # Leave room for Parquet footers and check the reserve every batch.
+            used = sum(path.stat().st_size for path in paths.values())
+            if used + len(paths) * 64 * 1024 > disk_budget_bytes:
+                raise ValueError("Duplicate partition scratch exceeded its disk budget")
+            check_disk(workspace, 0, reserve_bytes)
+        for bucket in list(buffers):
+            flush(bucket)
+    used = sum(path.stat().st_size for path in paths.values())
+    if used > disk_budget_bytes:
+        raise ValueError("Duplicate partition scratch exceeded its disk budget")
+    return paths, rows, used
