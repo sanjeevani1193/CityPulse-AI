@@ -14,7 +14,9 @@ import pytest
 
 from citypulse_ai.etl.archives import fingerprint, write_json
 from citypulse_ai.etl.historical import load_manifest
-from citypulse_ai.etl.history_catalog import TRIP_TYPES, aligned_trip_query, build_catalog
+from citypulse_ai.etl.history_catalog import (
+    TRIP_TYPES, aligned_trip_query, build_catalog, create_reconciliation_relations,
+)
 from citypulse_ai.etl.pipeline import AUDIT_COLUMNS, TRIP_SCHEMA
 
 
@@ -60,6 +62,40 @@ def partition_factory(tmp_path):
         return root, folder, table
 
     return create
+
+
+def test_many_rejected_csv_sources_bind_and_scan_at_512mb(partition_factory):
+    """The old sniffer exhausts 512 MB binding even tiny 16+ source UNIONs."""
+    legacy_rejected = []
+    for index in range(24):
+        month = f"{2024 + index // 12}-{index % 12 + 1:02d}"
+        rejected = {"source_file": 'original,"quoted"\nfile.csv', "source_row": 3,
+                    "ride_id": "00000" if index == 23 else f"rejected-{index:05d}",
+                    "started_at": "invalid,\"quoted\"\ninstant", "ended_at": "bad",
+                    "start_station_id": "001.01", "rejection_reasons": "started_at:invalid_timestamp"}
+        root, folder, _ = partition_factory(month, [{"id": f"{index:05d}"}],
+            rejection_rows=[rejected], audit_missing_end=index % 2 == 0)
+        # Read one source at a time using the original reader as the oracle.
+        with duckdb.connect(config={"memory_limit": "512MB", "threads": 2}) as c:
+            legacy_rejected.extend((month, *row) for row in c.execute(
+                "SELECT source_file,CAST(source_row AS BIGINT),ride_id,started_at,ended_at,"
+                "start_station_id,rejection_reasons FROM read_csv(?,header=true,all_varchar=true)",
+                [str(folder / "rejected_trips.csv")]).fetchall())
+    entries = list(load_manifest(root)["archives"].values())
+    before = {p: fingerprint(p) for p in root.rglob("*") if p.is_file()}
+    with duckdb.connect(config={"memory_limit": "512MB", "threads": 2}) as c:
+        create_reconciliation_relations(c, entries)
+        actual = c.execute("SELECT source_archive_month,source_file,source_row,ride_id,"
+            "started_at,ended_at,start_station_id,original_rejection_reasons "
+            "FROM raw_ride_occurrences WHERE NOT locally_valid ORDER BY 1").fetchall()
+        assert actual == sorted(legacy_rejected)
+        assert c.execute("SELECT count(*) FROM raw_ride_occurrences").fetchone()[0] == 48
+        assert c.execute("SELECT * FROM duplicate_ids").fetchall() == [("00000", 2, 2)]
+        assert c.execute("SELECT count(*) FROM canonical_trips").fetchone()[0] == 23
+        assert c.execute("SELECT count(*) FROM canonical_rejections").fetchone()[0] == 25
+        assert c.execute("SELECT sum(ride_count) FROM hourly_rides").fetchone()[0] == 23
+        assert c.execute("SELECT count(*) FROM canonical_rejections WHERE duplicate_ride_id").fetchone()[0] == 2
+    assert all(fingerprint(p) == value for p, value in before.items())
 
 
 def test_real_folder_layout_reproduces_old_failure_and_aligns(partition_factory):

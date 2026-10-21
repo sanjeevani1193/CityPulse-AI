@@ -329,3 +329,22 @@ this run, which reused the duplicate audit; they do not measure a fresh full-his
 duplicate construction or establish resource safety for every future nonzero set.
 All original inputs, manifests and persistent snapshots remain unchanged. Detailed
 local evidence is under `outputs/historical/june-2024-duplicate-filter-fix/`.
+
+### Rejected CSV binding at larger archive counts
+
+The April 2025 attempt failed before duplicate auditing when DuckDB bound the
+combined `raw_ride_occurrences` view. `all_varchar=true` still performs automatic
+CSV sniffing. A 24-source tiny-file reproduction at 512 MB exhausted memory while
+requesting another 30.5 MiB block; this is independent of the daily aggregation
+and cannot be solved by its external spill directory.
+
+The reader now supplies the complete checked header as explicit VARCHAR columns
+and disables automatic inference, using the comma/double-quote dialect emitted by
+the ETL audit writer. It preserves optional end-station compatibility, original
+strings, strict malformed-record handling, maximum line size, and every rejected
+occurrence used by the exact global duplicate audit. It does not materialize a
+new historical dataset or change checkpoint identity or canonical rules.
+
+The regression scans 24 synthetic source partitions at 512 MB and compares their
+rejected values with the original reader applied one file at a time, including
+embedded delimiters/newlines, leading-zero IDs and cross-source duplicates.

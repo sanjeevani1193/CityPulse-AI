@@ -75,16 +75,18 @@ def aligned_trip_query(path: Path, archive_month: str) -> tuple[str, dict]:
     return query, audit
 
 
-def rejected_end_station_expression(path: Path) -> str:
+def rejected_csv_columns(path: Path) -> list[str]:
     """Audit CSV values can be invalid/missing; their identity columns must exist."""
     with path.open(newline="", encoding="utf-8-sig") as stream:
         columns = next(csv.reader(stream), [])
+    if len(set(columns)) != len(columns) or any(not name for name in columns):
+        raise ValueError(f"Invalid or duplicate rejection-audit column names: {path}")
     required = {"source_file", "source_row", "ride_id", "started_at", "ended_at",
                 "start_station_id", "rejection_reasons"}
     missing = required - set(columns)
     if missing:
         raise ValueError(f"Missing required rejection-audit columns in {path}: {', '.join(sorted(missing))}")
-    return "end_station_id" if "end_station_id" in columns else "NULL::VARCHAR AS end_station_id"
+    return columns
 
 
 def validate_required_values(connection) -> None:
@@ -150,7 +152,14 @@ def create_reconciliation_relations(connection, entries: list[dict], *, duplicat
         valid_query, audit = aligned_trip_query(source / "validated_trips.parquet", entry["month"])
         valid_queries.append(valid_query)
         schema_audit.append(audit)
-        end_station = rejected_end_station_expression(source / "rejected_trips.csv")
+        columns = rejected_csv_columns(source / "rejected_trips.csv")
+        end_station = "end_station_id" if "end_station_id" in columns else "NULL::VARCHAR AS end_station_id"
+        # all_varchar alone still runs DuckDB's CSV sniffer at view binding.
+        # Each UNION branch can retain a ~30.5 MiB sniffing buffer. Supply the
+        # verified header's full string schema and standard writer dialect so
+        # binding many archives does not allocate history-wide sniffing buffers.
+        # Do not reduce maximum line size or ignore malformed records.
+        csv_schema = "{" + ", ".join(sql_literal(name) + ": 'VARCHAR'" for name in columns) + "}"
         raw_queries.extend([
             f"""SELECT {month} AS source_archive_month, source_file, source_row,
                 ride_id, trim(ride_id) AS normalized_ride_id,
@@ -163,7 +172,8 @@ def create_reconciliation_relations(connection, entries: list[dict], *, duplicat
                 started_at, ended_at, NULL::BIGINT AS started_at_utc_ns, NULL::BIGINT AS ended_at_utc_ns,
                 start_station_id, {end_station}, false AS locally_valid,
                 rejection_reasons AS original_rejection_reasons
-                FROM read_csv({rejected}, header=true, all_varchar=true)""",
+                FROM read_csv({rejected}, header=true, auto_detect=false,
+                    columns={csv_schema}, delim=',', quote='"', escape='"')""",
         ])
     connection.execute("CREATE VIEW locally_valid_trips AS " + " UNION ALL ".join(valid_queries))
     validate_required_values(connection)
