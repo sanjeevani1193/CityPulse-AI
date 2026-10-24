@@ -2,6 +2,7 @@
 
 import json
 from pathlib import Path
+from types import MappingProxyType
 
 import duckdb
 import pandas as pd
@@ -9,6 +10,7 @@ import pandas as pd
 from citypulse_ai.features.station_dataset import utc
 from citypulse_ai.etl.archives import fingerprint
 from citypulse_ai.etl.storage_state import output_receipts, source_receipts, revision_for
+from citypulse_ai.features.csv_source_inventory import source_inventory
 
 
 class StationHistory:
@@ -18,7 +20,7 @@ class StationHistory:
     omit recent months. Queries are in memory at 512 MB with disk spill disabled.
     """
 
-    def __init__(self, audit_path: Path, manifest_path: Path):
+    def __init__(self, audit_path: Path, manifest_path: Path, *, csv_inventories=None):
         self.audit_path, self.manifest_path = Path(audit_path), Path(manifest_path)
         self.audit_sha256 = fingerprint(self.audit_path)
         self.manifest_sha256 = fingerprint(self.manifest_path)
@@ -111,6 +113,38 @@ class StationHistory:
         if (total_rows, total_starts) != (self.report['hourly_rows'], self.report['hourly_ride_starts']):
             raise ValueError('Hourly checkpoint totals differ from completed audit')
         self._unchanged()
+        supplied = dict(csv_inventories or {})
+        if set(supplied) - self.source_months:
+            raise ValueError('CSV inventory supplied for an unknown source')
+        self.csv_inventories = MappingProxyType({m: (Path(p), sha) for m, (p, sha) in supplied.items()})
+        for month, (path, sha) in self.csv_inventories.items():
+            source_inventory(self, month, entries[month])
+            self._assets.append((path, sha))
+        self._unchanged()
+
+    def verify_source_inventories(self, months):
+        """Source-quality readiness without station selection or label creation."""
+        if any(self.report[k] for k in ('duplicate_ride_ids', 'cross_archive_duplicate_ride_ids')):
+            raise ValueError('Nonzero duplicates require exclusion-aware label certification')
+        self.verify_local_months(months)
+        required = set(months) | {str(pd.Period(m, freq='M')+1) for m in months}
+        manifest = json.loads(self.manifest_path.read_text())
+        result = {}
+        for month in sorted(required):
+            entry = manifest['archives'][month]
+            _, evidence = source_inventory(self, month, entry)
+            verified = evidence.get('source_member_inventory_verified',
+                                    evidence['archive_member_inventory_verified'])
+            if (not verified
+                    or entry['input_rows'] != entry['accepted_rows']+entry['rejected_rows']
+                    or not entry['verification']['input_equals_accepted_plus_rejected']
+                    or not entry['verification']['ride_counts_equal_accepted']
+                    or entry['verification']['timestamp_epoch_mismatches'] != 0):
+                raise ValueError(f'Required source inventory/conservation incomplete: {month}')
+            result[month] = {**evidence, 'source_member_inventory_verified': verified,
+                'source_inventory_kind': evidence.get('source_inventory_kind', 'original_archive_inventory')}
+        self._unchanged()
+        return result
 
     def _unchanged(self):
         if (fingerprint(self.audit_path) != self.audit_sha256

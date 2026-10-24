@@ -17,6 +17,7 @@ from citypulse_ai.etl.history_catalog import aligned_trip_query
 from citypulse_ai.etl.storage_state import revision_for
 from citypulse_ai.etl.trips import _parse_timestamp
 from citypulse_ai.features.station_dataset import NYC, _keys, _counts, utc
+from citypulse_ai.features.csv_source_inventory import source_inventory
 
 
 POLICY = {
@@ -131,14 +132,9 @@ def review_positive_labels(history, stations, *, start, end, max_rows=10_000):
                                            'max_temp_directory_size': '0B'}) as con:
         con.execute("SET TimeZone='UTC'")
         for month, entry in entries.items():
-            members = entry['source'].get('members', [])
-            files, schemas = entry.get('csv_files', []), entry.get('schemas', [])
-            expected = {m['name'] for m in members}
-            inventory_complete = bool(expected) and (
-                len(expected) == len(members) == len(files) == len(schemas)
-                and {f.get('member') for f in files} == expected
-                and {s.get('member') for s in schemas} == expected
-                and all(f.get('sha256') for f in files))
+            files, inventory = source_inventory(history, month, entry)
+            inventory_complete = inventory.get('source_member_inventory_verified',
+                                               inventory['archive_member_inventory_verified'])
             if (entry['input_rows'] != entry['accepted_rows'] + entry['rejected_rows']
                     or not entry['verification']['input_equals_accepted_plus_rejected']
                     or not entry['verification']['ride_counts_equal_accepted']
@@ -171,7 +167,7 @@ def review_positive_labels(history, stations, *, start, end, max_rows=10_000):
             receipts[month] = {'source': entry['source'], 'csv_files': files,
                 'input_rows': entry['input_rows'], 'accepted_rows': entry['accepted_rows'],
                 'rejected_rows': entry['rejected_rows'], 'processed_sha256': entry['output_sha256'],
-                'archive_member_inventory_verified': inventory_complete,
+                **inventory,
                 'selected_positive_starts_in_slice': int(part.ride_count_accepted.sum()),
                 'rejected_starts_affect_slice': bool(relevant_rejections),
                 'source_backup_revision': entry['source_backup']['revision'],

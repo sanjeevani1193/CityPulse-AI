@@ -2,6 +2,11 @@
 
 Policy identifier: **`accepted_recorded_starts_v1`**.
 
+CSV-backed legacy imports can supply an explicit, hash-pinned
+[CSV-only provenance supplement](csv_source_provenance.md) for original-file
+membership, schemas and row coverage. It does not claim a ZIP inventory or
+change this target policy. Missing or invalid supplements still fail closed.
+
 For a frozen, verified canonical source set R, station ID s and elapsed UTC hour
 `[t, t + 1h)`, the target is the number of **canonical accepted recorded rides**
 in R whose exact start-station ID is s and whose UTC start lies in that interval.

@@ -138,7 +138,8 @@ class AcceptedRecordedStarts:
         proof = enumeration.evidence
         required = set(local_months(start, end))
         required |= {str(pd.Period(m, freq='M')+1) for m in tuple(required)}
-        if any(not proof['sources'].get(m, {}).get('archive_member_inventory_verified', False) for m in required):
+        if any(not proof['sources'].get(m, {}).get('source_member_inventory_verified',
+                proof['sources'].get(m, {}).get('archive_member_inventory_verified', False)) for m in required):
             raise ValueError('Required source-period inventory coverage is unverified')
         recount = enumeration.lineage.groupby(['station_id','hour_start_utc'], as_index=False).ride_count_accepted.sum()
         # Exact outer-grid comparison proves both positive counts and absence of
