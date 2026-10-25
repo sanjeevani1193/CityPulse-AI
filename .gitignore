@@ -226,6 +226,7 @@ __marimo__/
 *.csv.gz
 !tests/fixtures/*.csv
 .venv/
+.venv-tft/
 .venv-tensorflow*/
 .venv-mlflow/
 .ipynb_checkpoints/
