@@ -3,15 +3,52 @@ CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science pl
 
 ### 🚀 Key Highlights
 
-- **Data Engineering:** Implemented memory-bounded ETL pipelines using Python, DuckDB, and Parquet, with validation and duplicate auditing. Reconciled over 7 million records across three processed source archives.
-- **Machine Learning:** Developed and evaluated five forecasting approaches, including XGBoost, PyTorch MLP, and TensorFlow LSTM, with a preliminary **18.1% reduction in test MAE** against a daily seasonal baseline.
+- **Data Engineering:** Implemented memory-bounded ETL pipelines using Python, DuckDB, and Parquet, with validation and duplicate auditing. Finalized all 24 NYC-local months (January 2024–December 2025), containing 89,995,902 accepted recorded starts; January 2026 provides the final boundary source.
+- **Machine Learning:** Completed the 100-station TFT and XGBoost validation benchmarks: XGBoost achieved **13.43% lower clipped validation MAE** than the six-epoch TFT on the same targets. Earlier citywide MLP/LSTM experiments remain separate preliminary studies.
 - **Model Serving:** Built local FastAPI-based model inference workflows with Docker support and model-specific preprocessing.
 - **MLOps & Cloud:** Integrated MLflow experiment tracking, automated GitHub Actions CI, and Google Cloud Storage with verified artifact transfers.
 
 **Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
 
-**Current Status:** Core data engineering, initial forecasting experiments, local inference, and MLOps workflows are implemented. Historical data expansion, weather integration, SQLPilot, ExperimentLab, and further deployment capabilities remain in development.
+**Current Status:** Historical ingestion, the final 100-station dataset, six TFT training epochs, and the bounded XGBoost validation benchmark are complete. **Final held-out testing and final-model deployment integration remain pending.** Existing inference services serve earlier citywide models. Weather integration, SQLPilot and ExperimentLab remain future work.
 
+
+## Final 100-station validation benchmarks
+
+Stations and preprocessing were selected/fitted using January 2024–June 2025
+training data only. The frozen dataset contains 53,300 training windows, 9,200
+validation windows (July–September 2025), and 9,200 held-out test windows
+(October–December 2025). Forecasts issue at America/New_York midnight with
+336 historical and 24 future **elapsed hours**, preserving DST behavior.
+Labels follow `accepted_recorded_starts_v1`, including certified source-scoped
+zeros; they measure accepted recorded starts, not unmet physical demand.
+
+Both benchmarks use **the same 220,800 eligible validation targets**, with
+matching station/origin/target/lead keys and historical lag baselines.
+
+| Model | Clipped validation MAE | Clipped RMSE | Clipped WAPE |
+| --- | ---: | ---: | ---: |
+| XGBoost, depth 6, 300 rounds | **4.1028** | 6.4225 | 30.008% |
+| TFT, selected `epoch-006.pt` | **4.7391** | 7.4922 | 34.662% |
+| Lag-24 baseline | 6.0211 | 9.5619 | 44.038% |
+| Lag-168 baseline | 5.2934 | 8.3116 | 38.716% |
+
+Clipping is `max(0, prediction)` in original ride-count units. XGBoost's MAE is
+**13.43% lower** than TFT's, computed from the unrounded scores. These are
+validation comparisons with different model representations and selection
+budgets; they are not held-out test results. TFT's six-epoch budget is complete,
+without a convergence claim. XGBoost was selected from three predefined candidates.
+
+Both runs are tracked separately in MLflow; checkpoints/models, reports and
+recovery bundles were checksum- and generation-verified in GCS, including restore
+checks. Large artifacts remain outside Git. See [TFT training and recovery](docs/tft_training.md),
+[XGBoost benchmark and reproduction](docs/station_xgboost_benchmark.md), and
+[final dataset preparation](docs/final_tft_dataset.md).
+
+**Pending:** freeze final comparison specifications, perform the separately
+authorized held-out test evaluation, and integrate the selected final model into
+serving. No final station-level model has been deployed by this milestone.
+Earlier phase descriptions below document the project's development history.
 
 ## Architecture overview
 
@@ -34,10 +71,11 @@ SQLPilot -------> governed warehouse queries
 ExperimentLab --> statistical analysis and A/B testing
 ```
 
-DuckDB will provide the initial SQL warehouse. Forecasting will start with simple
-baselines before adding PyTorch and TensorFlow models. SQLPilot will eventually
-use a fine-tuned text-to-SQL model with MCP, LangGraph, and vLLM. Docker, CI/CD,
-Kubernetes, and cloud hosting belong to later deployment phases. The original
+DuckDB provides the SQL warehouse. Seasonal baselines, PyTorch, TensorFlow and
+XGBoost forecasting implementations are available. SQLPilot will eventually
+use a fine-tuned text-to-SQL model with MCP, LangGraph, and vLLM. Docker Compose
+and inference CI are implemented; Kubernetes and production cloud hosting remain
+later deployment phases. The original
 full scope remains unchanged: ARIMA, XGBoost, PyTorch, TensorFlow, LSTM, TFT,
 MLflow and model monitoring, QLoRA fine-tuning on H100, LangGraph/MCP/vLLM,
 FastAPI, Docker, Kubernetes, GitHub Actions, AWS and Google Cloud integration,
@@ -74,8 +112,8 @@ incrementally with measured experiments; this is not a reduced MVP.
 The ETL package contains the implemented trip pipeline, and
 `features/reporting.py` prepares the reviewed February reporting dataset.
 `features/preparation.py` creates forecasting grids and coverage audits, with a
-module CLI in `features/cli.py`. The forecasting, evaluation, experiments, and
-SQLPilot subpackages remain placeholders. The `src/` layout separates
+module CLI in `features/cli.py`. Forecasting and evaluation contain implemented models and metrics; ExperimentLab
+and SQLPilot remain future work. The `src/` layout separates
 importable code from repository files.
 
 ## Local setup and tests
