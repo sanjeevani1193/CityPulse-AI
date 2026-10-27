@@ -1,5 +1,10 @@
 # Final 100-station TFT training
 
+This document records the training/validation milestone. The later authorized
+[final held-out benchmark](final_held_out_benchmark.md) is complete; final-model
+deployment integration remains pending. Statements about held-out status below
+describe the earlier milestone.
+
 ## Finalized six-epoch experiment
 
 The native PyTorch TFT completed six full epochs on the frozen 100-station

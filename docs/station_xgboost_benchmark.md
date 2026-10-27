@@ -1,5 +1,10 @@
 # Final 100-station XGBoost validation benchmark
 
+This document records the training/validation milestone. The later authorized
+[final held-out benchmark](final_held_out_benchmark.md) is complete; final-model
+deployment integration remains pending. Statements about held-out status below
+describe the earlier milestone.
+
 Use the immutable station100 dataset and its training-selected station vocabulary.
 This is a pooled direct, horizon-conditioned model: one row for each station,
 NYC-local midnight issuance and lead 1–24. No recursive forecast updates or

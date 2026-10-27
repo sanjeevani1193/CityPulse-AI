@@ -4,13 +4,13 @@ CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science pl
 ### 🚀 Key Highlights
 
 - **Data Engineering:** Implemented memory-bounded ETL pipelines using Python, DuckDB, and Parquet, with validation and duplicate auditing. Finalized all 24 NYC-local months (January 2024–December 2025), containing 89,995,902 accepted recorded starts; January 2026 provides the final boundary source.
-- **Machine Learning:** Completed the 100-station TFT and XGBoost validation benchmarks: XGBoost achieved **13.43% lower clipped validation MAE** than the six-epoch TFT on the same targets. Earlier citywide MLP/LSTM experiments remain separate preliminary studies.
+- **Machine Learning:** Completed matched 100-station validation and held-out benchmarks: XGBoost achieved **13.43% lower clipped validation MAE** and **10.70% lower clipped test MAE** than the six-epoch TFT on the same respective targets. Earlier citywide MLP/LSTM experiments remain separate preliminary studies.
 - **Model Serving:** Built local FastAPI-based model inference workflows with Docker support and model-specific preprocessing.
 - **MLOps & Cloud:** Integrated MLflow experiment tracking, automated GitHub Actions CI, and Google Cloud Storage with verified artifact transfers.
 
 **Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
 
-**Current Status:** Historical ingestion, the final 100-station dataset, six TFT training epochs, and the bounded XGBoost validation benchmark are complete. **Final held-out testing and final-model deployment integration remain pending.** Existing inference services serve earlier citywide models. Weather integration, SQLPilot and ExperimentLab remain future work.
+**Current Status:** Historical ingestion, the final 100-station dataset, six TFT training epochs, and the bounded XGBoost benchmark and final held-out comparison are complete. **Final-model deployment integration remains pending.** Existing inference services serve earlier citywide models. Weather integration, SQLPilot and ExperimentLab remain future work.
 
 
 ## Final 100-station validation benchmarks
@@ -45,9 +45,24 @@ checks. Large artifacts remain outside Git. See [TFT training and recovery](docs
 [XGBoost benchmark and reproduction](docs/station_xgboost_benchmark.md), and
 [final dataset preparation](docs/final_tft_dataset.md).
 
-**Pending:** freeze final comparison specifications, perform the separately
-authorized held-out test evaluation, and integrate the selected final model into
-serving. No final station-level model has been deployed by this milestone.
+The subsequently authorized **October–December 2025 held-out benchmark is complete**:
+
+| Forecast | Test MAE | Test RMSE | Test WAPE |
+| --- | ---: | ---: | ---: |
+| XGBoost clipped | **3.3663** | **5.2630** | **37.123%** |
+| TFT epoch 6 clipped | 3.7696 | 5.9449 | 41.570% |
+| Lag-24 | 4.6071 | 7.4208 | 50.806% |
+| Lag-168 | 4.7665 | 7.7200 | 52.563% |
+
+All four use the same **220,800 test targets**; 100 station-hours in the November
+DST gap are explicitly unscored by the 24-elapsed-hour midnight contract.
+Absolute errors are lower than on validation, but WAPE rises for every method.
+TFT clipped q10–q90 coverage is **79.495%** (nominal 80%). Results, provenance,
+MLflow and verified GCS recovery are documented in the
+[final held-out benchmark](docs/final_held_out_benchmark.md).
+
+**Pending:** final-model FastAPI/Docker integration and an operational publication-
+latency policy. No final station-level model has been deployed by this milestone.
 Earlier phase descriptions below document the project's development history.
 
 ## Architecture overview
