@@ -81,10 +81,10 @@ def paired_metrics(actual,prediction):
     return {'targets':len(actual),**scores}
 
 
-def materialize(root,split,out,*,progress=lambda s:None):
+def materialize(root,split,out,*,progress=lambda s:None,reader_factory=LazyStationWindows):
     """One station frame in RAM, float32 feature memmaps; never test targets."""
     if split not in ('train','validation'):raise ValueError('Test split is not authorized')
-    root=Path(root);out=Path(out);data=LazyStationWindows(root,split)
+    root=Path(root);out=Path(out);data=reader_factory(root,split)
     left,right=map(utc,data.manifest['splits'][split])
     paths=[p for p in data.paths if pd.Timestamp(p.stem.removeprefix('panel-')+'-01',tz='America/New_York').tz_convert('UTC')<right]
     index=data.index.sort_values(['station_id','origin_utc']).reset_index(drop=True)
