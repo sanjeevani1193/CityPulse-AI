@@ -183,3 +183,11 @@ frozen clipping, response metadata and saved-reference parity tests, followed by
 container resource checks. Operational count-publication latency also needs an
 explicit policy before claiming a real-time forecasting service. None of that
 integration was started here.
+
+## Subsequent frozen-model follow-up
+
+The authorized one-time MLP/LSTM test extension is complete. See the
+[six-method follow-up benchmark](six_model_followup_benchmark.md) for all six
+methods, raw/clipped scores, shared-key checks, disclosure limitations and recovery.
+The training/validation history and original four-method measurements above are
+preserved. Final station-level FastAPI/Docker integration remains pending.

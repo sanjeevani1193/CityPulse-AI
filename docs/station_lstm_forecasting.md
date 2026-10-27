@@ -181,4 +181,13 @@ Verification: 70 relevant native Linux synthetic/data/label tests passed
 (24 Keras/NumPy deprecation warnings, no unexpected skips). Fresh implementation
 syntax and whitespace checks passed. No full project test suite is claimed.
 The original citywide LSTM, TFT, station MLP and XGBoost artifacts are preserved.
-No serving integration or held-out LSTM evaluation has been performed.
+At the training milestone, no serving integration or held-out LSTM evaluation
+had been performed. The subsequent authorized test phase is recorded below.
+
+## Subsequent frozen-model follow-up
+
+The authorized one-time MLP/LSTM test extension is complete. See the
+[six-method follow-up benchmark](six_model_followup_benchmark.md) for all six
+methods, raw/clipped scores, shared-key checks, disclosure limitations and recovery.
+The training/validation history and original four-method measurements above are
+preserved. Final station-level FastAPI/Docker integration remains pending.

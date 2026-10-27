@@ -4,13 +4,13 @@ CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science pl
 ### 🚀 Key Highlights
 
 - **Data Engineering:** Implemented memory-bounded ETL pipelines using Python, DuckDB, and Parquet, with validation and duplicate auditing. Finalized all 24 NYC-local months (January 2024–December 2025), containing 89,995,902 accepted recorded starts; January 2026 provides the final boundary source.
-- **Machine Learning:** Completed matched 100-station validation and held-out benchmarks: XGBoost achieved **13.43% lower clipped validation MAE** and **10.70% lower clipped test MAE** than the six-epoch TFT on the same respective targets. Earlier citywide MLP/LSTM experiments remain separate preliminary studies.
+- **Machine Learning:** Completed matched 100-station validation and held-out benchmarks: XGBoost achieved **13.43% lower clipped validation MAE** and **10.70% lower clipped test MAE** than the six-epoch TFT on the same respective targets. The frozen station MLP/LSTM follow-up completes a six-method test leaderboard; it was added after the initial test results were disclosed. Earlier citywide experiments remain separate preliminary studies.
 - **Model Serving:** Built local FastAPI-based model inference workflows with Docker support and model-specific preprocessing.
 - **MLOps & Cloud:** Integrated MLflow experiment tracking, automated GitHub Actions CI, and Google Cloud Storage with verified artifact transfers.
 
 **Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
 
-**Current Status:** Historical ingestion, the final 100-station dataset, six TFT training epochs, and the bounded XGBoost benchmark and final held-out comparison are complete. **Final-model deployment integration remains pending.** Existing inference services serve earlier citywide models. Weather integration, SQLPilot and ExperimentLab remain future work.
+**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Final-model deployment integration remains pending.** Existing inference services serve earlier citywide models. Weather integration, SQLPilot and ExperimentLab remain future work.
 
 
 ## Final 100-station validation benchmarks
@@ -23,12 +23,14 @@ validation windows (July–September 2025), and 9,200 held-out test windows
 Labels follow `accepted_recorded_starts_v1`, including certified source-scoped
 zeros; they measure accepted recorded starts, not unmet physical demand.
 
-Both benchmarks use **the same 220,800 eligible validation targets**, with
+All methods use **the same 220,800 eligible validation targets**, with
 matching station/origin/target/lead keys and historical lag baselines.
 
 | Model | Clipped validation MAE | Clipped RMSE | Clipped WAPE |
 | --- | ---: | ---: | ---: |
 | XGBoost, depth 6, 300 rounds | **4.1028** | 6.4225 | 30.008% |
+| MLP, selected `epoch-010.pt` | 4.1213 | 6.4504 | 30.143% |
+| LSTM, selected `epoch-018.keras` | 4.5272 | 7.0553 | 33.112% |
 | TFT, selected `epoch-006.pt` | **4.7391** | 7.4922 | 34.662% |
 | Lag-24 baseline | 6.0211 | 9.5619 | 44.038% |
 | Lag-168 baseline | 5.2934 | 8.3116 | 38.716% |
@@ -39,7 +41,7 @@ validation comparisons with different model representations and selection
 budgets; they are not held-out test results. TFT's six-epoch budget is complete,
 without a convergence claim. XGBoost was selected from three predefined candidates.
 
-Both runs are tracked separately in MLflow; checkpoints/models, reports and
+The learned-model runs are tracked separately in MLflow; checkpoints/models, reports and
 recovery bundles were checksum- and generation-verified in GCS, including restore
 checks. Large artifacts remain outside Git. See [TFT training and recovery](docs/tft_training.md),
 [XGBoost benchmark and reproduction](docs/station_xgboost_benchmark.md), and
@@ -49,17 +51,21 @@ The subsequently authorized **October–December 2025 held-out benchmark is comp
 
 | Forecast | Test MAE | Test RMSE | Test WAPE |
 | --- | ---: | ---: | ---: |
-| XGBoost clipped | **3.3663** | **5.2630** | **37.123%** |
+| XGBoost clipped | 3.3663 | 5.2630 | 37.123% |
+| MLP epoch 10 clipped | 3.4015 | 5.3244 | 37.511% |
 | TFT epoch 6 clipped | 3.7696 | 5.9449 | 41.570% |
+| LSTM epoch 18 clipped | 3.8010 | 5.8195 | 41.917% |
 | Lag-24 | 4.6071 | 7.4208 | 50.806% |
 | Lag-168 | 4.7665 | 7.7200 | 52.563% |
 
-All four use the same **220,800 test targets**; 100 station-hours in the November
-DST gap are explicitly unscored by the 24-elapsed-hour midnight contract.
+All six use the same **220,800 test targets**; 100 station-hours after the 24-hour forecast on November's
+25-hour day are explicitly unscored by the 24-elapsed-hour midnight contract.
 Absolute errors are lower than on validation, but WAPE rises for every method.
 TFT clipped q10–q90 coverage is **79.495%** (nominal 80%). Results, provenance,
 MLflow and verified GCS recovery are documented in the
-[final held-out benchmark](docs/final_held_out_benchmark.md).
+[final held-out benchmark](docs/final_held_out_benchmark.md). The [six-method follow-up report](docs/six_model_followup_benchmark.md) adds raw/clipped MLP/LSTM scores, validation-versus-test gaps, frozen identities and verified recovery.
+
+**Disclosure:** MLP and LSTM were developed after the initial four-method test results were known. Their configurations/checkpoints were frozen before this one-time follow-up test pass. This extension is **not a fully blind six-model experiment**; the four saved original results were reused without rerunning those methods.
 
 **Pending:** final-model FastAPI/Docker integration and an operational publication-
 latency policy. No final station-level model has been deployed by this milestone.

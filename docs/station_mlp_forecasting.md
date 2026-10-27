@@ -182,10 +182,18 @@ selected validation scores and comparison/provenance references without copying
 weights or datasets. Idempotent import preserves that run and metric steps;
 existing citywide, TFT, XGBoost and final-test runs are not modified.
 
-The existing VM is stopped, with the protected 100 GiB disk retained. The original
-citywide MLP, TFT/XGBoost checkpoints and historical data remain intact. This MLP
-is ready for a separately authorized **one-time follow-up test evaluation** after
-verifying its selected-checkpoint manifest; it has not accessed the held-out
-targets. Because the project's earlier test results were disclosed before this
-follow-up, do not describe an eventual extension as a newly untouched blind test.
-No LSTM or serving integration was started. No commit or push was performed.
+At the training milestone, the existing VM was stopped and its protected 100 GiB
+disk retained. The original citywide MLP, TFT/XGBoost checkpoints and historical
+data remained intact. The MLP was frozen for a separately authorized one-time
+follow-up test, with held-out targets untouched during development. Earlier test
+results had already been disclosed, so a later extension could not be described
+as a newly untouched blind test. That training task did not start LSTM or serving
+integration, or commit/push; subsequent milestones are recorded below.
+
+## Subsequent frozen-model follow-up
+
+The authorized one-time MLP/LSTM test extension is complete. See the
+[six-method follow-up benchmark](six_model_followup_benchmark.md) for all six
+methods, raw/clipped scores, shared-key checks, disclosure limitations and recovery.
+The training/validation history and original four-method measurements above are
+preserved. Final station-level FastAPI/Docker integration remains pending.
