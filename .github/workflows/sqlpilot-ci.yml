@@ -47,4 +47,4 @@ jobs:
           python -m pip check
           python -m venv .sqlpilot-core
           .sqlpilot-core/bin/python -m pip install --only-binary=:all: duckdb==1.5.6 pytz==2026.5
-      - run: python -m pytest tests/test_sqlpilot_app.py -q --tb=short
+      - run: python -m pytest tests/test_sqlpilot_app.py tests/test_sqlpilot_live_preparation.py -q --tb=short

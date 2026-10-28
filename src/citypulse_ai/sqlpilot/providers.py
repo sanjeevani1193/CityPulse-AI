@@ -65,10 +65,11 @@ class HostedJSONBackend:
     def __init__(self, config, *, transport=None):
         self.config = config; self.transport = transport
         self.is_live = transport is None
-        self.calls = 0; self.successful_generations = 0
+        self.calls = 0; self.successful_generations = 0; self.last_http_status = None
         if not config.status()['configured']: raise ValueError('Provider is not approved and configured')
 
     def generate(self, question, schema):
+        self.last_http_status = None
         if schema_identity(schema) != self.config.approved_schema_sha256:
             raise ValueError('Schema differs from the approved outbound schema')
         instruction = ('Generate one DuckDB SELECT over the supplied sample schema. Return only a JSON object '
@@ -82,18 +83,27 @@ class HostedJSONBackend:
             'response_format': {'type': 'json_object'}, 'messages': [
                 {'role': 'system', 'content': instruction},
                 {'role': 'user', 'content': json.dumps({'question': question, 'schema': schema})}]}
+        if self.config.provider == 'groq' and self.config.model in {'openai/gpt-oss-20b', 'openai/gpt-oss-120b'}:
+            # Groq GPT-OSS does not support reasoning_format. Keep reasoning out
+            # of responses and reserve a bounded completion budget for reasoning + JSON.
+            payload.pop('max_tokens')
+            payload.update(max_completion_tokens=1024, reasoning_effort='low', include_reasoning=False)
         deadline = time.monotonic()+15
         with httpx.Client(timeout=12, trust_env=False, follow_redirects=False, transport=self.transport) as client:
             self.calls += 1
             with client.stream('POST', self.config.endpoint,
                     headers={'Authorization': 'Bearer '+self.config.api_key}, json=payload) as response:
+                self.last_http_status = response.status_code
                 response.raise_for_status(); parts = bytearray()
                 for chunk in response.iter_bytes():
                     parts.extend(chunk)
                     if len(parts) > 16384 or time.monotonic() > deadline:
                         raise ValueError('Provider response/time budget exceeded')
         body = json.loads(parts)
-        decision = json.loads(body['choices'][0]['message']['content'])
+        choice = body['choices'][0]
+        if choice.get('finish_reason') not in (None, 'stop'):
+            raise ValueError('Provider response did not finish normally')
+        decision = json.loads(choice['message']['content'])
         self.successful_generations += 1
         return decision
 

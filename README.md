@@ -51,6 +51,7 @@ approval**. No Codex session is required by the application. No local LLM is loa
 The original deterministic core and Forecasting v1 remain unchanged.
 
 - [Application setup, provider gates, traces and evaluation foundation](docs/sqlpilot_application.md)
+- [Proposed Groq model, free-tier checks, secure key setup and privacy scope](docs/sqlpilot_groq_setup.md)
 - [Core schema, native SQL safety policy and measured sample evaluation](docs/sqlpilot_core.md)
 
 Nine frozen natural-language evaluation cases are prepared for later live testing.

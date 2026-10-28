@@ -114,6 +114,9 @@ text are displayed without unsafe HTML; explanations/clarifications use plain te
 
 ## LLM provider: implemented adapter, live access NOT approved
 
+See [current Groq/model/free-tier research and secure key setup](sqlpilot_groq_setup.md)
+for the proposed GPT-OSS 20B profile and the exact approval scope.
+
 Groq is a **candidate**, not an activated account. Its official documentation lists
 [a Free Plan](https://console.groq.com/docs/rate-limits), [billing requirements](https://console.groq.com/docs/billing-faqs)
 and [JSON/structured output support](https://console.groq.com/docs/structured-outputs).
