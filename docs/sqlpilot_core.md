@@ -1,5 +1,10 @@
 # SQLPilot: deterministic query and MCP core
 
+The later [standalone application milestone](sqlpilot_application.md) adds real
+LangGraph orchestration, the official MCP client and Streamlit. This document
+records the unchanged core and its earlier verification; live LLM approval is
+still pending.
+
 SQLPilot is a separate component under `src/citypulse_ai/sqlpilot/`. Forecasting v1
 models, datasets, services, checkpoints and evaluation are unchanged. This milestone
 implements the safe analytical substrate; **SQLPilot v1 text-to-SQL is not complete**.

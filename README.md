@@ -38,22 +38,24 @@ not a hosted production deployment or proof that all frameworks fit an 8 GB Mac.
   The first run's restart-command failure was fixed and verified separately;
   the benchmark was not rerun.
 
-## SQLPilot deterministic core
+## SQLPilot standalone application milestone
 
-SQLPilot now exposes a bounded **read-only DuckDB query core and MCP stdio tools**,
-using the existing small analytical sample. Native DuckDB AST validation blocks
-writes, external access, unauthorized tables/columns and unsafe functions; isolated
-workers enforce row, memory and time limits. Five hand-authored queries matched
-independent references on the existing sample; **this is not text-to-SQL accuracy**.
+SQLPilot now has a **Streamlit UI → LangGraph agent → official MCP client →
+existing read-only DuckDB server**. The bounded graph discovers schema, generates
+SQL or asks for clarification, executes through MCP, permits one correction, and
+returns actual rows with a grounded explanation and sanitized trace.
 
-**No usable LLM is configured:** the installed Ollama service is unreachable and
-local memory pressure prevents loading the cached model safely. Questions fail
-explicitly with `backend_unavailable`. SQLPilot v1 remains incomplete pending real
-LLM integration/evaluation. LangGraph, expanded MCP and possible QLoRA remain on
-the roadmap; no fine-tuning or ExperimentLab work has begun.
+Real MCP/LangGraph/SQL integration is verified using controlled generation doubles;
+**live LLM generation remains pending provider, free-account and data-sharing
+approval**. No Codex session is required by the application. No local LLM is loaded.
+The original deterministic core and Forecasting v1 remain unchanged.
 
-See [SQLPilot commands, schema, safety boundary and measurements](docs/sqlpilot_core.md).
-Forecasting v1 remains unchanged.
+- [Application setup, provider gates, traces and evaluation foundation](docs/sqlpilot_application.md)
+- [Core schema, native SQL safety policy and measured sample evaluation](docs/sqlpilot_core.md)
+
+Nine frozen natural-language evaluation cases are prepared for later live testing.
+No text-to-SQL accuracy is claimed yet. Docker packaging, QLoRA fine-tuning and
+ExperimentLab have not begun.
 
 ## Final 100-station validation benchmarks
 
