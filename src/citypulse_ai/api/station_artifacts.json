@@ -1,0 +1,185 @@
+{
+  "format_version": 1,
+  "dataset_manifest_sha256": "a6747adb2485276e2e7aa735dc24b1a10048e9b8526928c489a9472a532ba952",
+  "target_policy": "accepted_recorded_starts_v1",
+  "training_period": [
+    "2024-01-01",
+    "2025-07-01"
+  ],
+  "artifacts": {
+    "preprocessing.json": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-lstm/station100-20261027/preprocessing.json",
+      "generation": "1793103659200077",
+      "size_bytes": 24894,
+      "sha256": "f788108df037662b5bbc0739f6f22f105e798e2839bed1e67100cf570b0467fe"
+    },
+    "xgboost/model.ubj": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-xgboost/station100-20261026/model.ubj",
+      "generation": "1793028513803336",
+      "size_bytes": 2502679,
+      "sha256": "f7a64cc25e38893b0a566dab2957034fd81f8db6bdf2c712abace79015451b2a"
+    },
+    "xgboost/preprocessing.json": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-xgboost/station100-20261026/preprocessing.json",
+      "generation": "1793028514198941",
+      "size_bytes": 4222,
+      "sha256": "193bbb9b0da2b94934314f25ca25abb4783ba7be729919a44bccd6b145dcd159"
+    },
+    "mlp/epoch-010.pt": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-mlp/station100-20261027/epoch-010.pt",
+      "generation": "1793101068103877",
+      "size_bytes": 97752,
+      "sha256": "8bf098d0f3eca06f3fb569931433233c6fb221aff48017ff8d34b5acf414f63f"
+    },
+    "mlp/preprocessing.json": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-mlp/station100-20261027/preprocessing.json",
+      "generation": "1793100953763222",
+      "size_bytes": 5959,
+      "sha256": "a3c046a057d41895c7750d98f166e9d31ce533d461381e813cda377d4dde33c4"
+    },
+    "lstm/epoch-018.keras": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-lstm/station100-20261027/resumed/epoch-018.keras",
+      "generation": "1793128528307072",
+      "size_bytes": 164416,
+      "sha256": "81dde6d7faf480e7e870fb2234a0208828f1f6cb857b95a18c589913d4c531ec"
+    },
+    "tft/epoch-006.pt": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/tft/station100-20261025/epochs/epoch-006.pt",
+      "generation": "1792960124653611",
+      "size_bytes": 1192212,
+      "sha256": "5396d276b1d05f84ffcd969767b4319faa659cb2107c022e3fd87d70c7fe12c6"
+    }
+  },
+  "development": {
+    "dataset_recovery": {
+      "cloud_path": "gs://citypulse-ai-511315-data/datasets/tft/accepted_recorded_starts_v1/station100-20261024/dataset-recovery.zip",
+      "generation": "1792843627171250",
+      "size_bytes": 110793351,
+      "sha256": "5e7642bbb72c5950fa9017770701b14b7289d69bf919560ebe3f5789c7035a49"
+    },
+    "validation_panel": {
+      "name": "panel-2025-07.parquet",
+      "size_bytes": 22265961,
+      "sha256": "f1f093e7af68d7a91ac5b319c614d0d0a7d913668c620e4249c82a90c42b31a3"
+    },
+    "validation_references": {
+      "xgboost": {
+        "cloud_path": "gs://citypulse-ai-511315-data/models/station-xgboost/station100-20261026/validation-predictions.parquet",
+        "generation": "1793028514811042",
+        "size_bytes": 3396955,
+        "sha256": "298904620eaacc5ee58911bc39ea1ca900e65d75eae3446fd7c2836a6f88bbd4"
+      },
+      "pytorch-mlp": {
+        "cloud_path": "gs://citypulse-ai-511315-data/models/station-mlp/station100-20261027/validation-predictions.parquet",
+        "generation": "1793101147511933",
+        "size_bytes": 4340945,
+        "sha256": "507d1a6fdcf2ccf6ec70f31cf6407042675df49383ac968af3fb464e593bac59"
+      },
+      "tensorflow-lstm": {
+        "cloud_path": "gs://citypulse-ai-511315-data/models/station-lstm/station100-20261027/epoch020/validation-predictions.parquet",
+        "generation": "1793130877231915",
+        "size_bytes": 4340536,
+        "sha256": "0225eb09b1c7c92a1e097d8ec396c977e5c2eb878f8884f94256dd6c55c5275f"
+      }
+    },
+    "station_id": "6140.05",
+    "origin": "2025-08-01T00:00:00-04:00"
+  },
+  "diagnostics": {
+    "cloud_path": "gs://citypulse-ai-511315-data/benchmarks/station100/six-method-followup-20261027/test-predictions.parquet",
+    "generation": "1793135240190936",
+    "size_bytes": 17359043,
+    "sha256": "4f726d274a1d3090078f7663cc591e2d560d06d332056d168c6c38289f95accd"
+  },
+  "benchmark": {
+    "paired_key_sha256": "658573cfdd2aa24de99a29f82478ed008368fdf33af91b702e288a3171867cc7",
+    "targets": 220800,
+    "metrics": {
+      "xgboost": {
+        "targets": 220800,
+        "MAE": 3.3663318230240447,
+        "RMSE": 5.263048575186863,
+        "WAPE_percent": 37.12311522983795
+      },
+      "pytorch-mlp": {
+        "targets": 220800,
+        "MAE": 3.401521887735003,
+        "RMSE": 5.324446245112594,
+        "WAPE_percent": 37.51118298307472
+      },
+      "pytorch-tft": {
+        "targets": 220800,
+        "MAE": 3.7695714977437604,
+        "RMSE": 5.944923824113029,
+        "WAPE_percent": 41.56994747836387
+      },
+      "tensorflow-lstm": {
+        "targets": 220800,
+        "MAE": 3.801047466689854,
+        "RMSE": 5.819506162306412,
+        "WAPE_percent": 41.91705705745074
+      },
+      "lag-24": {
+        "targets": 220800,
+        "MAE": 4.607124094202899,
+        "RMSE": 7.420831858424936,
+        "WAPE_percent": 50.80628043186085
+      },
+      "lag-168": {
+        "targets": 220800,
+        "MAE": 4.766462862318841,
+        "RMSE": 7.719980135797076,
+        "WAPE_percent": 52.56343087344591
+      }
+    },
+    "validation_metrics": {
+      "xgboost": {
+        "targets": 220800,
+        "MAE": 4.102756140323995,
+        "RMSE": 6.422501822929392,
+        "WAPE_percent": 30.007507960206947
+      },
+      "pytorch-tft": {
+        "targets": 220800,
+        "MAE": 4.7391398695856335,
+        "RMSE": 7.492228430812146,
+        "WAPE_percent": 34.66201073064378
+      },
+      "pytorch-mlp": {
+        "targets": 220800,
+        "MAE": 4.121261768858246,
+        "RMSE": 6.4504465467397525,
+        "WAPE_percent": 30.14285789974937
+      },
+      "tensorflow-lstm": {
+        "targets": 220800,
+        "MAE": 4.527196499195168,
+        "RMSE": 7.055316574180614,
+        "WAPE_percent": 33.11185952579963
+      },
+      "lag-24": {
+        "targets": 220800,
+        "MAE": 6.021064311594203,
+        "RMSE": 9.561870657513335,
+        "WAPE_percent": 44.03799033612875
+      },
+      "lag-168": {
+        "targets": 220800,
+        "MAE": 5.293392210144927,
+        "RMSE": 8.311582574414114,
+        "WAPE_percent": 38.715805534051945
+      }
+    },
+    "TFT_uncertainty": {
+      "pinball_by_quantile": {
+        "q10": 0.7186501811738463,
+        "q50": 1.8847857488718802,
+        "q90": 1.0208727108774625
+      },
+      "mean_pinball": 1.2081028803077296,
+      "interval_coverage": 0.7949547101449276,
+      "nominal_interval_coverage": 0.8
+    },
+    "followup_after_prior_test_disclosure": true
+  }
+}

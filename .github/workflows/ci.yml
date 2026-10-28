@@ -53,7 +53,9 @@ jobs:
       - name: Check Python syntax, workflow and Docker definitions
         run: python scripts/check_ci.py
       - name: Validate Compose without building or starting services
-        run: docker compose config --quiet
+        run: |
+          docker compose config --quiet
+          docker compose -f compose.station.yaml --profile lstm config --quiet
 
   gateway-tests:
     name: Artifact-free gateway contracts
@@ -75,7 +77,7 @@ jobs:
       - name: Require serving runtimes
         run: python -c "import torch, xgboost, fastapi, httpx, sklearn, duckdb, pyarrow"
       - name: Run required gateway contracts without local artifacts
-        run: python -m pytest tests/ci/test_gateway.py -q --tb=short
+        run: python -m pytest tests/ci/test_gateway.py tests/ci/test_station_contracts.py tests/test_forecasting_diagnostics.py -q --tb=short
 
   worker-tests:
     name: Artifact-free TensorFlow worker contracts
@@ -97,4 +99,4 @@ jobs:
       - name: Require worker runtimes
         run: python -c "import tensorflow, keras, fastapi, httpx, sklearn, h5py, duckdb, pyarrow"
       - name: Run required worker contracts without local artifacts
-        run: python -m pytest tests/ci/test_worker.py -q --tb=short
+        run: python -m pytest tests/ci/test_worker.py tests/ci/test_station_worker.py -q --tb=short

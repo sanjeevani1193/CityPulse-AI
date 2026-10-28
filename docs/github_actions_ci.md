@@ -135,3 +135,14 @@ package-index outages should fail clearly in the corresponding step. The cache
 can reduce later downloads but will not eliminate a cold initial installation.
 A successful CI run neither publishes a service nor replaces artifact-backed
 model validation or deployment resource profiling.
+
+## Station100 release-candidate coverage
+
+The gateway job additionally selects `tests/ci/test_station_contracts.py` and
+`tests/test_forecasting_diagnostics.py`. The worker job selects
+`tests/ci/test_station_worker.py`. These use explicit synthetic fixtures and
+transport/model doubles; they verify contracts and transformations, not benchmark
+scores. They need no saved weights, historical panels or cloud credentials.
+The repository job also validates `compose.station.yaml` without building images.
+Real frozen-artifact parity and live Docker verification remain local checks;
+remote CI success must be confirmed after the eventual push.

@@ -1,0 +1,89 @@
+# Station100 release candidate; original compose.yaml preserves the citywide demo.
+services:
+  forecast-gateway:
+    image: citypulse-forecast-gateway:local
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: docker/gateway.Dockerfile
+    ports:
+    - 127.0.0.1:8000:8000
+    environment:
+      CITYPULSE_STATION_ARTIFACT_DIR: /artifacts/station
+      CITYPULSE_LSTM_WORKER_URL: http://lstm-worker:8001
+      CITYPULSE_LSTM_COMPOSE_NETWORK: '1'
+    volumes:
+    - type: bind
+      source: ./outputs/forecasting-v1/artifacts
+      target: /artifacts/station
+      read_only: true
+      bind:
+        create_host_path: false
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    networks:
+    - inference
+    - gateway-host
+    command:
+    - python
+    - -m
+    - uvicorn
+    - citypulse_ai.api.station_app:app
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8000'
+    - --workers
+    - '1'
+  lstm-worker:
+    image: citypulse-lstm-worker:local
+    platform: linux/arm64
+    build:
+      context: .
+      dockerfile: docker/worker.Dockerfile
+    environment:
+      CITYPULSE_STATION_ARTIFACT_DIR: /artifacts/station
+    volumes:
+    - type: bind
+      source: ./outputs/forecasting-v1/artifacts
+      target: /artifacts/station
+      read_only: true
+      bind:
+        create_host_path: false
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    cpus: 1.0
+    read_only: true
+    tmpfs:
+    - /tmp:size=64m
+    cap_drop:
+    - ALL
+    security_opt:
+    - no-new-privileges:true
+    networks:
+    - inference
+    command:
+    - python
+    - -m
+    - uvicorn
+    - citypulse_ai.api.station_worker:app
+    - --host
+    - 0.0.0.0
+    - --port
+    - '8001'
+    - --workers
+    - '1'
+    profiles:
+    - lstm
+networks:
+  inference:
+    internal: true
+  gateway-host: {}

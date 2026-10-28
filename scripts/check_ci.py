@@ -63,7 +63,28 @@ def check():
             assert mount['type'] == 'bind' and mount['read_only'] is True
             assert mount['bind']['create_host_path'] is False
 
-    files = [ROOT / '.github/workflows/ci.yml', ROOT / 'compose.yaml', ROOT / '.dockerignore']
+    station = yaml.safe_load((ROOT / 'compose.station.yaml').read_text())
+    assert station['networks'] == compose['networks']
+    assert set(station['services']) == set(services)
+    for name, service in station['services'].items():
+        worker = name == 'lstm-worker'
+        assert service['command'] == ['python', '-m', 'uvicorn',
+            'citypulse_ai.api.' + ('station_worker:app' if worker else 'station_app:app'),
+            '--host', '0.0.0.0', '--port', '8001' if worker else '8000', '--workers', '1']
+        assert service['environment']['CITYPULSE_STATION_ARTIFACT_DIR'] == '/artifacts/station'
+        assert service['mem_limit'] == service['memswap_limit'] == '1536m'
+        assert service['read_only'] is True
+        assert service['volumes'] == [{'type': 'bind', 'source': './outputs/forecasting-v1/artifacts',
+            'target': '/artifacts/station', 'read_only': True, 'bind': {'create_host_path': False}}]
+        if worker:
+            assert 'ports' not in service and service['profiles'] == ['lstm']
+            assert service['networks'] == ['inference']
+        else:
+            assert service['ports'] == ['127.0.0.1:8000:8000']
+            assert service['environment']['CITYPULSE_LSTM_WORKER_URL'] == 'http://lstm-worker:8001'
+            assert service['environment']['CITYPULSE_LSTM_COMPOSE_NETWORK'] == '1'
+
+    files = [ROOT / '.github/workflows/ci.yml', ROOT / 'compose.yaml', ROOT / '.dockerignore', ROOT / 'compose.station.yaml']
     files += list((ROOT / 'ci').glob('*.txt'))
     files += list((ROOT / 'tests/ci').glob('*.py')) + [Path(__file__)]
     files += list((ROOT / 'docker').glob('*.Dockerfile')) + list((ROOT / 'docker').glob('*.requirements.txt'))

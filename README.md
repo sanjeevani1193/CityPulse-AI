@@ -10,8 +10,27 @@ CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science pl
 
 **Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
 
-**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Final-model deployment integration remains pending.** Existing inference services serve earlier citywide models. Weather integration, SQLPilot and ExperimentLab remain future work.
+**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Station-level serving is now a release candidate; native HTTP/LSTM and Docker verification remain pending because of host memory pressure.** The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). Weather integration, SQLPilot and ExperimentLab remain future work.
 
+
+## Station100 inference release candidate
+
+The new FastAPI gateway supports XGBoost (default), MLP, TFT, lag-24 and lag-168,
+with LSTM routed to an isolated TensorFlow worker. It reuses frozen preprocessing
+and original feature construction; seven pinned serving artifacts total only
+**4 MB**. The 336-hour request and 24-hour response preserve UTC elapsed ordering,
+NYC midnight issuance, missingness and explicit availability assumptions.
+
+Native XGBoost/MLP/TFT restoration has been exercised; **real HTTP, station LSTM
+parity and station Docker execution are not yet verified**. The Mac's memory
+pressure stopped the live-service check before startup. This is a release
+candidate, not a claim of completed deployment. Existing citywide services and
+Compose configuration are preserved.
+
+- [Provision artifacts, run the validation demo, and understand readiness](docs/forecasting_v1.md)
+- [Saved-prediction bias, station and temporal diagnostics](docs/forecasting_v1_diagnostics.md)
+- Optional station Compose: `compose.station.yaml`; Docker verification awaits
+  the user's manual Docker Desktop startup with sufficient memory.
 
 ## Final 100-station validation benchmarks
 
