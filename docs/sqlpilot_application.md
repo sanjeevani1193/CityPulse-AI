@@ -46,7 +46,8 @@ Trace records contain node outcomes, attempts, SQL hashes, tool names, timing an
 row counts, not credentials, questions or raw query rows. They remain in the local
 session unless explicitly exported. Automatic LangSmith tracing is disabled even
 when tracing environment variables exist; Streamlit usage telemetry is disabled.
-No MCP/model tracing service was provisioned.
+No MCP/model tracing service was provisioned. Live-generation evidence is counted
+per invocation; earlier backend successes cannot mark a later failed call verified.
 
 ## Isolated environment and startup
 
@@ -150,7 +151,7 @@ with an error. Confirm sufficient free quota before any evaluation batch.
 
 ## Tests and evaluation foundation
 
-**Local verification: 13 application tests and the unchanged 42 core tests passed.**
+**Local verification: 14 application tests and the unchanged 42 core tests passed.**
 Controlled generation tests use **real LangGraph, real MCP client/server processes
 and real DuckDB execution**. They verify success, clarification/unanswerable paths,
 one correction, repeated attack rejection, budgets, schema failure, SDK discovery,

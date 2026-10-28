@@ -96,6 +96,8 @@ async def run_agent(question, database, backend=None):
         return {'status': 'error', 'error': 'Enter an analytical question of 1–2000 characters', 'trace': []}
     if backend is None:
         return {'status': 'backend_unavailable', 'error': 'No approved configured LLM. No external call or guessed SQL was made.', 'trace': [], 'live_llm_exercised': False}
+    success_before = getattr(backend, 'successful_generations', 0)
+    calls_before = getattr(backend, 'calls', 0)
     try:
         async with asyncio.timeout(60):
             async with connect_tools(database) as tools:
@@ -104,8 +106,11 @@ async def run_agent(question, database, backend=None):
                         {'question': question, 'attempts': 0, 'tool_calls': 0, 'trace': []}, config={'recursion_limit': 10})
                 result['mcp_trace'] = tools.audit
         result['latency_seconds'] = time.monotonic()-started
-        result['live_llm_exercised'] = bool(getattr(backend, 'is_live', False) and getattr(backend, 'successful_generations', 0))
+        result['live_llm_exercised'] = bool(getattr(backend, 'is_live', False) and getattr(backend, 'successful_generations', 0) > success_before)
+        result['live_llm_attempted'] = bool(getattr(backend, 'is_live', False) and getattr(backend, 'calls', 0) > calls_before)
         return result
     except Exception:
         return {'status': 'error', 'error': 'Agent or MCP startup exceeded its budget or failed safely',
-                'trace': [], 'live_llm_exercised': False, 'latency_seconds': time.monotonic()-started}
+                'trace': [], 'live_llm_exercised': bool(getattr(backend, 'is_live', False) and getattr(backend, 'successful_generations', 0) > success_before),
+                'live_llm_attempted': bool(getattr(backend, 'is_live', False) and getattr(backend, 'calls', 0) > calls_before),
+                'latency_seconds': time.monotonic()-started}

@@ -166,3 +166,14 @@ def test_replaceable_endpoint_requires_exact_operator_approval():
     assert alternate.status()['configured']
     assert not replace(alternate,endpoint='http://approved.example/chat',approved_endpoint='http://approved.example/chat').status()['configured']
     assert not replace(alternate,endpoint='https://[invalid',approved_endpoint='https://[invalid').status()['configured']
+
+
+def test_prior_provider_success_is_not_current_live_evidence(sample):
+    class PreviouslySuccessful:
+        is_live=True
+        calls=10
+        successful_generations=10
+        def generate(self,q,s):raise ValueError('No response in this invocation')
+    result=ask(sample,PreviouslySuccessful())
+    assert result['status']=='error'
+    assert not result['live_llm_exercised'] and not result['live_llm_attempted']
