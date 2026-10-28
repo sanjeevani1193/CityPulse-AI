@@ -1,0 +1,26 @@
+name: SQLPilot deterministic core
+'on':
+  push:
+    branches: [main]
+    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot.py', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml']
+  pull_request:
+    branches: [main]
+    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot.py', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml']
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    env:
+      PYTHONPATH: src
+      PYTHONDONTWRITEBYTECODE: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - run: python -m pip install --only-binary=:all: duckdb==1.5.6 pytz==2026.5 pytest==9.1.1
+      - run: python -m pytest tests/test_sqlpilot.py -q --tb=short

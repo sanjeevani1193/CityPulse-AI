@@ -1,1 +1,1 @@
-"""SQLPilot: future text-to-SQL generation and query orchestration."""
+"""SQLPilot readonly analytical/MCP core; approved real LLM backend pending."""

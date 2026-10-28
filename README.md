@@ -38,6 +38,23 @@ not a hosted production deployment or proof that all frameworks fit an 8 GB Mac.
   The first run's restart-command failure was fixed and verified separately;
   the benchmark was not rerun.
 
+## SQLPilot deterministic core
+
+SQLPilot now exposes a bounded **read-only DuckDB query core and MCP stdio tools**,
+using the existing small analytical sample. Native DuckDB AST validation blocks
+writes, external access, unauthorized tables/columns and unsafe functions; isolated
+workers enforce row, memory and time limits. Five hand-authored queries matched
+independent references on the existing sample; **this is not text-to-SQL accuracy**.
+
+**No usable LLM is configured:** the installed Ollama service is unreachable and
+local memory pressure prevents loading the cached model safely. Questions fail
+explicitly with `backend_unavailable`. SQLPilot v1 remains incomplete pending real
+LLM integration/evaluation. LangGraph, expanded MCP and possible QLoRA remain on
+the roadmap; no fine-tuning or ExperimentLab work has begun.
+
+See [SQLPilot commands, schema, safety boundary and measurements](docs/sqlpilot_core.md).
+Forecasting v1 remains unchanged.
+
 ## Final 100-station validation benchmarks
 
 Stations and preprocessing were selected/fitted using January 2024–June 2025
@@ -148,7 +165,7 @@ incrementally with measured experiments; this is not a reduced MVP.
 │       ├── forecasting/      # Baselines and future forecasting models
 │       ├── evaluation/       # Backtesting and forecast metrics
 │       ├── experiments/      # ExperimentLab statistical analysis
-│       └── sqlpilot/         # Future text-to-SQL agent
+│       └── sqlpilot/         # Read-only SQL/MCP core; LLM backend pending
 └── tests/
     ├── fixtures/             # Synthetic valid, invalid, empty, and DST CSVs
     ├── test_etl.py            # Validation, aggregation, persistence, and CLI tests

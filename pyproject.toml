@@ -21,6 +21,7 @@ citypulse-etl = "citypulse_ai.etl.cli:main"
 citypulse-publish = "citypulse_ai.cloud.publish:main"
 
 [project.optional-dependencies]
+sqlpilot = ["duckdb==1.5.6"] # Native AST policy is tested against this exact version.
 cloud = ["google-cloud-storage>=3,<4"]
 dev = ["pytest>=8,<10"]
 notebooks = ["jupyterlab>=4,<5", "ipykernel>=6,<8", "matplotlib>=3.9,<4"]
