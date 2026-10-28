@@ -1,0 +1,122 @@
+name: Frozen station100 release verification
+
+'on':
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: station100-manual-verification
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PYTHONPATH: src:.
+      PYTHONDONTWRITEBYTECODE: '1'
+      CITYPULSE_CI_REQUIRE_NO_SKIPS: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      CUDA_VISIBLE_DEVICES: '-1'
+      TF_ENABLE_ONEDNN_OPTS: '0'
+      TF_CPP_MIN_LOG_LEVEL: '2'
+      CITYPULSE_STATION_ARTIFACT_DIR: outputs/forecasting-v1/artifacts
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Check standard runner capacity
+        run: |
+          mkdir -p verification-reports
+          python3 - <<'PY'
+          import json, pathlib, shutil
+          m={k:int(v.strip().split()[0])*1024 for k,v in (line.split(':',1) for line in pathlib.Path('/proc/meminfo').read_text().splitlines()) if k in ['MemTotal','MemAvailable','SwapTotal','SwapFree']}
+          r={'architecture':__import__('platform').machine(),'memory':m,'disk_free_bytes':shutil.disk_usage('.').free}
+          pathlib.Path('verification-reports/capacity.json').write_text(json.dumps(r,indent=2))
+          assert r['architecture']=='aarch64' and m['MemAvailable']>=8*1024**3
+          assert m['SwapTotal']==m['SwapFree'] and r['disk_free_bytes']>=16*1024**3
+          PY
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.14'
+      - name: Install isolated CPU gateway runtime
+        run: |
+          python -m venv .gateway
+          .gateway/bin/python -m pip install --no-cache-dir --only-binary=:all: -r docker/gateway.requirements.txt pytest==9.1.1 'google-cloud-storage>=3,<4' PyYAML==6.0.3
+          .gateway/bin/python -m pip check
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.11'
+      - name: Install isolated TensorFlow CPU runtime
+        run: |
+          python -m venv .worker
+          .worker/bin/python -m pip install --no-cache-dir --only-binary=:all: -r docker/worker.requirements.txt httpx==0.28.1 pytest==9.1.1
+          .worker/bin/python -m pip check
+      - name: Obtain short-lived restricted GCS credentials
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
+        with:
+          project_id: citypulse-ai-511315
+          workload_identity_provider: projects/64394592274/locations/global/workloadIdentityPools/citypulse-github-verification/providers/github-manual
+          create_credentials_file: true
+          export_environment_variables: true
+      - name: Restore only pinned serving artifacts and validation demo
+        run: .gateway/bin/python scripts/provision_forecasting_v1.py --demo
+      - name: Artifact-free gateway and model regressions
+        run: |
+          .gateway/bin/python -m pytest tests/ci/test_gateway.py tests/ci/test_station_contracts.py tests/test_forecasting_diagnostics.py tests/test_station_dataset.py tests/test_station_history.py tests/test_final_station_dataset.py -q --tb=short --junitxml=verification-reports/gateway-tests.xml
+          .gateway/bin/python -m pytest tests/test_tft.py -k 'not backward and not missing_step' -q --tb=short --junitxml=verification-reports/tft-tests.xml
+          .gateway/bin/python -m pytest tests/test_station_mlp.py -k 'not tiny_training' -q --tb=short --junitxml=verification-reports/mlp-tests.xml
+      - name: Artifact-free TensorFlow and station regressions
+        run: |
+          .worker/bin/python -m pytest tests/ci/test_worker.py tests/ci/test_station_worker.py -q --tb=short --junitxml=verification-reports/worker-tests.xml
+          .worker/bin/python -m pytest tests/test_station_lstm.py -k 'not complete_epochs' -q --tb=short --junitxml=verification-reports/lstm-tests.xml
+      - name: Native frozen model parity and sequential real HTTP checks
+        run: .gateway/bin/python -m citypulse_ai.evaluation.serving_verification --mode native --worker-python .worker/bin/python
+      - name: Check image build headroom
+        run: |
+          .gateway/bin/python - <<'PY'
+          import shutil
+          assert shutil.disk_usage('.').free>=13*1024**3, 'Insufficient disk for bounded sequential builds'
+          PY
+          docker compose -f compose.station.yaml --profile lstm config --quiet
+      - name: Build CPU gateway image
+        run: docker compose -f compose.station.yaml build forecast-gateway
+      - name: Recheck capacity before worker build
+        run: |
+          .gateway/bin/python - <<'PY'
+          import shutil
+          assert shutil.disk_usage('.').free>=8*1024**3
+          PY
+      - name: Build CPU TensorFlow image
+        run: docker compose -f compose.station.yaml build lstm-worker
+      - name: Start isolated Compose services
+        run: docker compose -f compose.station.yaml --profile lstm up -d --wait --wait-timeout 120
+      - name: Real Docker HTTP parity, failure isolation and recovery
+        run: .gateway/bin/python -m citypulse_ai.evaluation.serving_verification --mode docker
+      - name: Record image sizes and final disk
+        if: always()
+        run: |
+          python3 - <<'PY'
+          import json,pathlib,shutil,subprocess
+          p=subprocess.run(['docker','image','inspect','citypulse-forecast-gateway:local','citypulse-lstm-worker:local','--format','{{json .Size}}'],capture_output=True,text=True)
+          r={'image_sizes_bytes':[int(x) for x in p.stdout.splitlines() if x.isdigit()],'disk_free_bytes':shutil.disk_usage('.').free}
+          pathlib.Path('verification-reports/storage.json').write_text(json.dumps(r,indent=2))
+          PY
+      - name: Stop ephemeral verification containers
+        if: always()
+        run: docker compose -f compose.station.yaml --profile lstm down --timeout 15
+      - name: Publish sanitized verification summaries only
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: station100-verification-${{ github.run_id }}
+          path: verification-reports/
+          if-no-files-found: error
+          retention-days: 14
