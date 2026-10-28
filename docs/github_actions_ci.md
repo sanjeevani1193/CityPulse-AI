@@ -136,7 +136,7 @@ can reduce later downloads but will not eliminate a cold initial installation.
 A successful CI run neither publishes a service nor replaces artifact-backed
 model validation or deployment resource profiling.
 
-## Station100 release-candidate coverage
+## Station100 inference coverage
 
 The gateway job additionally selects `tests/ci/test_station_contracts.py` and
 `tests/test_forecasting_diagnostics.py`. The worker job selects
@@ -145,4 +145,7 @@ transport/model doubles; they verify contracts and transformations, not benchmar
 scores. They need no saved weights, historical panels or cloud credentials.
 The repository job also validates `compose.station.yaml` without building images.
 Real frozen-artifact parity and live Docker verification remain local checks;
-remote CI success must be confirmed after the eventual push.
+ordinary CI passed for the hosted-verification source revisions. The separate
+manual `forecasting-verification.yml` performs real artifact-backed native and
+Docker checks on standard ARM64 runners using restricted short-lived federation;
+see [results and revocation](cloud_release_verification.md).

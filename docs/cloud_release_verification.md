@@ -1,7 +1,7 @@
 # Frozen station100 verification on GitHub-hosted ARM64
 
-Status: workflow prepared; **no verification success is claimed until its run
-passes**. Local Mac memory pressure prevents live services. This moves only
+Status: **required verification completed across the two recorded runs**, including
+the successful targeted worker-recovery check. Local Mac memory pressure prevents live services. This moves only
 verification to a standard GitHub-hosted Ubuntu ARM64 runner, not Compute Engine.
 No training, historical ingestion or held-out inference is part of this workflow.
 
@@ -112,4 +112,24 @@ This does not invalidate the preceding model parity. Recovery now separates plai
 `start` from a bounded 90-second application-readiness poll, with a regression test.
 The manual `docker-recovery` scope repeats only the affected container isolation,
 restart and LSTM parity checks, not native inference, regressions or any benchmark.
-Release completion still requires this recovery check to pass.
+[Targeted run 40709209185](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40709209185)
+**passed** worker failure isolation, bounded application readiness and restored
+LSTM parity (maximum absolute difference 0.000004168 rides). Previously passed
+native and regression phases were intentionally skipped in this targeted run;
+they were not failing or missing tests. No model, scaler or API implementation was
+changed by the harness fix.
+
+The native run peaked at 995,024,896 bytes combined child RSS. The largest sampled
+combined container memory across both runs was 703,175,066 bytes. Both runs used
+zero swap. The full run started with 115,286,110,208 bytes free disk and ended with
+107,594,993,664; the targeted run started with 114,261,893,120 and ended with
+108,785,188,864. These deltas include dependencies, images, build cache and scratch,
+not just model artifacts. Final uncompressed image sizes were 1,496,883,835 bytes
+(gateway) and 2,239,503,763 bytes (worker). Sampling cannot establish worst-case
+memory safety. Services/containers were stopped by cleanup in both runs.
+
+GCS transfer was limited to small models and validation fixtures. At ordinary
+internet egress rates this is estimated to consume cents of trial credit across
+both runs, not a measured billing charge. No paid billing activation, compute
+instance or service-account key was created. The WIF trust and read-only role
+remain active; use the revocation instructions above when approved.

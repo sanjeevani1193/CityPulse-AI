@@ -1,11 +1,12 @@
-# Station100 inference: Forecasting v1 release candidate
+# Station100 inference: verified Forecasting v1
 
-**Status, October 28:** station API implementation, pinned artifact provisioning,
-post-hoc diagnostics and lightweight tests are available. Native model restoration
-has been exercised for XGBoost, MLP and TFT. Real HTTP verification, native station
-LSTM parity, and station Docker startup remain pending because macOS reports
-warning-level memory pressure. Docker Desktop is stopped and will be started
-manually by the user. This is **not yet a fully verified release**.
+**Status, October 28, 2026:** native frozen-model restoration, saved-validation
+parity, real six-method FastAPI HTTP inference and CPU Docker Compose inference
+are verified on standard GitHub-hosted ARM64 runners. Worker outage isolation and
+restart recovery passed after a small verification-harness fix. This completes the
+Forecasting v1 reproducible demonstration; it is not hosted production deployment.
+The Mac remains unsuitable for heavy verification while memory pressure is elevated.
+See [run evidence and secure cloud access](cloud_release_verification.md).
 
 ## Architecture and preserved functionality
 
@@ -157,7 +158,7 @@ exists: that parity is not claimed. A separate frozen synthetic restore probe
 matched its original normalized-output hash exactly; the real-window original TFT
 forward versus HTTP comparison still awaits safe service execution.
 
-## Docker preparation — execution pending
+## Docker Compose — verified on hosted ARM64
 
 An image packages application code and dependencies; a container runs that image.
 The existing Dockerfiles install CPU-serving requirements, use a non-root UID and
@@ -168,8 +169,9 @@ TensorFlow; only gateway localhost:8000 is exposed. The internal worker hostname
 `lstm-worker`, not the container's localhost. The original citywide Compose remains
 available unchanged.
 
-**Do not run these commands until Docker Desktop is manually started with enough
-host memory. They are prepared instructions, not evidence of a passed check.**
+The commands below were exercised on the hosted runner. On an 8 GB Mac, first
+check memory pressure and start Docker Desktop manually only when resources are
+safe. Hosted verification does not establish local capacity.
 
 ```sh
 docker compose -f compose.station.yaml --profile lstm config --quiet
@@ -183,40 +185,59 @@ docker compose -f compose.station.yaml --profile lstm stop
 Build sequentially only if required; existing images may lack the new source.
 No automatic prune or deletion is performed. Each service retains its existing
 1536 MiB memory/swap ceiling and CPU limit. These caps are not proof of combined
-host safety. Existing images previously used approximately 7.17 GB; new image/cache
-sizes and station container RSS must still be measured. Keep at least 10 GiB host
+host safety. The verified images are approximately 1.50 GB (gateway) and 2.24 GB (worker),
+uncompressed image sizes. Builds and Python environments also consume disk;
+this is not their total cache footprint. Observed combined container memory peaked
+at approximately 671 MiB across the two runs, not a guaranteed worst case. Keep at least 10 GiB host
 free, preserve Docker settings, and stop test containers after verification.
 
-## Verification and remaining release work
+## Measured verification and limitations
 
-Measured in this preparation:
+Evidence is split across [the full native/container run](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40707527557)
+and [the successful targeted recovery run](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40709209185).
+The first run passed all model checks but failed at `compose start --wait`;
+the exact private command diagnostic was not exported. The harness now starts
+normally and polls application readiness for at most 90 seconds. The second run
+verified only the affected outage/restart/LSTM parity checks; passed native phases
+were deliberately not repeated. No model or frozen preprocessing changed.
 
-- All seven frozen serving files retrieved with pinned generations/SHA-256.
-- Native real XGBoost and lag forecasts exactly matched the validation references;
-  native MLP maximum absolute difference was 0.00000642 rides.
-- Native TFT produced 24×3 quantiles; its separate frozen synthetic restore probe
-  reproduced the original hash exactly. This is not a test-set evaluation.
-- 23 new artifact-free contract/worker-transform/diagnostics tests and three
-  synthetic provisioning tests passed. No test doubles are presented as real
-  learned predictions. An additional 44 dataset/history regression tests passed. The two synthetic
-  worker tests also passed in the existing Python 3.11 worker environment.
-- Static Python, workflow YAML, Dockerfile contracts and Compose safety checks
-  passed without starting Docker.
-- Real HTTP verification stopped **before starting either service**: macOS kernel
-  memory-pressure level 2, about 7.46 GiB swap in use. This host-wide observation
-  is not attributed to CityPulse. No service RSS measurement is available.
+| Check | Measured result |
+| --- | --- |
+| Pinned serving artifacts | Seven files; exact generations, sizes and SHA-256 verified |
+| Native and Docker XGBoost, lag-24, lag-168 | 24 outputs each; exact validation/lag reference parity |
+| Native and Docker MLP | Maximum saved-reference absolute error 0.000005133 rides |
+| Native and Docker LSTM | Maximum saved-reference absolute error 0.000004168 rides |
+| Native TFT | 24×3 ordered quantiles; original frozen forward comparison error 0 |
+| Docker TFT | 24 point outputs and ordered q10/q50/q90; no saved per-target TFT validation export exists |
+| Input validation | Seven live invalid cases rejected with 422; DST/masks/causality covered by regressions |
+| Worker outage and recovery | LSTM 503 while other models remain available; restart returns valid LSTM forecasts |
+| Framework/contract regressions | 174 passed, zero test failures or skips in the first run |
+| Native combined child RSS | Peak sampled 995,024,896 bytes (about 949 MiB) |
+| Container memory | Peak sampled across runs 703,175,066 bytes (about 671 MiB) |
+| Swap | Zero use observed in both hosted runs |
 
-CI now selects artifact-free station gateway and worker contracts in addition to
-existing citywide contracts. Real saved-artifact parity stays local; fresh runners
-have no weights or cloud credentials. Remote CI has not yet run these changes.
-The TensorFlow runtime regression and full gateway runtime regression are deferred
-while host memory pressure remains high; no full-suite success is claimed.
+Synthetic full training-loop tests were intentionally not selected for this
+verification task. Three new lightweight monitor/workflow/restart tests also
+passed locally. Ordinary artifact-free CI passed for both verification commits;
+real weights remain restricted to the manual keyless workflow. Sanitized reports
+are downloadable from the run pages for 14 days; source, numerical summaries and
+commands remain in Git. Private weights, requests, raw forecasts and service logs
+were not uploaded as GitHub artifacts. All temporary services and containers
+stopped; no GCP VM or heavy local process was started.
 
-Next: finish native LSTM/HTTP parity and worker failure isolation when memory is
-safe; verify station Docker startup, parity and restart behavior after the user
-starts Docker; inspect final diffs, then commit/push the verified release. Do not
-claim production readiness: authentication, rate limiting, live count publication,
-station-status ingestion, weather and hosted deployment remain deferred.
+No held-out inference, real-data model training, ETL or benchmark recalculation
+occurred. Framework unit tests used small synthetic fixtures only.
+The previously established scores and non-blind follow-up qualification remain
+unchanged. TFT's original per-target validation export is unavailable: the real
+HTTP comparison instead uses an independently assembled original validation window
+and original model forward path. Its separate frozen synthetic restore probe had
+also matched its original output hash exactly.
 
-See [saved benchmark diagnostics](forecasting_v1_diagnostics.md) and the existing
-[CI guide](github_actions_ci.md) for the separation between testing and deployment.
+Operational publication latency, caller-count certification, live station status,
+authentication/rate limiting, weather and hosted deployment remain deferred.
+Lazy loading does not guarantee that all cached models fit the user's Mac. The
+hosted measurements are samples on 16 GB runners, not worst-case memory proofs.
+
+See [saved benchmark diagnostics](forecasting_v1_diagnostics.md),
+[keyless workflow and revocation instructions](cloud_release_verification.md),
+and the [CI guide](github_actions_ci.md).

@@ -10,10 +10,10 @@ CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science pl
 
 **Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
 
-**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Station-level serving is now a release candidate; native HTTP/LSTM and Docker verification remain pending because of host memory pressure.** The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). Weather integration, SQLPilot and ExperimentLab remain future work.
+**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Forecasting v1 verification is complete:** frozen station-model restoration, real six-method HTTP inference and CPU Docker Compose inference/recovery passed on standard GitHub-hosted ARM64 runners. The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). Weather integration, SQLPilot and ExperimentLab remain future work.
 
 
-## Station100 inference release candidate
+## Forecasting v1: verified station100 inference
 
 The new FastAPI gateway supports XGBoost (default), MLP, TFT, lag-24 and lag-168,
 with LSTM routed to an isolated TensorFlow worker. It reuses frozen preprocessing
@@ -21,16 +21,22 @@ and original feature construction; seven pinned serving artifacts total only
 **4 MB**. The 336-hour request and 24-hour response preserve UTC elapsed ordering,
 NYC midnight issuance, missingness and explicit availability assumptions.
 
-Native XGBoost/MLP/TFT restoration has been exercised; **real HTTP, station LSTM
-parity and station Docker execution are not yet verified**. The Mac's memory
-pressure stopped the live-service check before startup. This is a release
-candidate, not a claim of completed deployment. Existing citywide services and
-Compose configuration are preserved.
+All six methods returned 24 forecasts through real native and container HTTP.
+LSTM and MLP matched saved validation probes within `rtol=1e-5, atol=1e-4`;
+XGBoost and seasonal baselines matched exactly. TFT matched its original frozen
+forward path exactly, including ordered quantiles. **174 selected regression tests
+passed**, and worker failure isolation/recovery passed. Existing citywide services
+and Compose configuration are preserved. This is a verified reproducible demo,
+not a hosted production deployment or proof that all frameworks fit an 8 GB Mac.
 
 - [Provision artifacts, run the validation demo, and understand readiness](docs/forecasting_v1.md)
 - [Saved-prediction bias, station and temporal diagnostics](docs/forecasting_v1_diagnostics.md)
-- Optional station Compose: `compose.station.yaml`; Docker verification awaits
-  the user's manual Docker Desktop startup with sufficient memory.
+- Optional station Compose: `compose.station.yaml`; native and Docker verification
+  runs on a standard hosted runner with [restricted keyless GCS access](docs/cloud_release_verification.md).
+- [Native/six-method evidence](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40707527557)
+  and [successful targeted Docker recovery](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40709209185).
+  The first run's restart-command failure was fixed and verified separately;
+  the benchmark was not rerun.
 
 ## Final 100-station validation benchmarks
 
