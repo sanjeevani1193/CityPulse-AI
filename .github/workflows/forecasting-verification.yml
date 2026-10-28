@@ -2,6 +2,12 @@ name: Frozen station100 release verification
 
 'on':
   workflow_dispatch:
+    inputs:
+      scope:
+        description: Full verification, or only the previously failed Docker recovery check
+        type: choice
+        options: [full, docker-recovery]
+        default: full
 
 permissions:
   contents: read
@@ -55,6 +61,7 @@ jobs:
         with:
           python-version: '3.11'
       - name: Install isolated TensorFlow CPU runtime
+        if: inputs.scope != 'docker-recovery'
         run: |
           python -m venv .worker
           .worker/bin/python -m pip install --no-cache-dir --only-binary=:all: -r docker/worker.requirements.txt httpx==0.28.1 pytest==9.1.1
@@ -69,15 +76,18 @@ jobs:
       - name: Restore only pinned serving artifacts and validation demo
         run: .gateway/bin/python scripts/provision_forecasting_v1.py --demo
       - name: Artifact-free gateway and model regressions
+        if: inputs.scope != 'docker-recovery'
         run: |
           .gateway/bin/python -m pytest tests/ci/test_gateway.py tests/ci/test_station_contracts.py tests/test_forecasting_diagnostics.py tests/test_station_dataset.py tests/test_station_history.py tests/test_final_station_dataset.py -q --tb=short --junitxml=verification-reports/gateway-tests.xml
           .gateway/bin/python -m pytest tests/test_tft.py -k 'not backward and not missing_step' -q --tb=short --junitxml=verification-reports/tft-tests.xml
           .gateway/bin/python -m pytest tests/test_station_mlp.py -k 'not tiny_training' -q --tb=short --junitxml=verification-reports/mlp-tests.xml
       - name: Artifact-free TensorFlow and station regressions
+        if: inputs.scope != 'docker-recovery'
         run: |
           .worker/bin/python -m pytest tests/ci/test_worker.py tests/ci/test_station_worker.py -q --tb=short --junitxml=verification-reports/worker-tests.xml
           .worker/bin/python -m pytest tests/test_station_lstm.py -k 'not complete_epochs' -q --tb=short --junitxml=verification-reports/lstm-tests.xml
       - name: Native frozen model parity and sequential real HTTP checks
+        if: inputs.scope != 'docker-recovery'
         run: .gateway/bin/python -m citypulse_ai.evaluation.serving_verification --mode native --worker-python .worker/bin/python
       - name: Check image build headroom
         run: |
@@ -99,7 +109,7 @@ jobs:
       - name: Start isolated Compose services
         run: docker compose -f compose.station.yaml --profile lstm up -d --wait --wait-timeout 120
       - name: Real Docker HTTP parity, failure isolation and recovery
-        run: .gateway/bin/python -m citypulse_ai.evaluation.serving_verification --mode docker
+        run: .gateway/bin/python -m citypulse_ai.evaluation.serving_verification --mode ${{ inputs.scope == 'docker-recovery' && 'docker-recovery' || 'docker' }}
       - name: Record image sizes and final disk
         if: always()
         run: |

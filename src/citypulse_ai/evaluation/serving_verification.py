@@ -72,7 +72,7 @@ class Verification:
                     for line in Path(f'/proc/{child.pid}/status').read_text().splitlines():
                         if line.startswith('VmRSS:'): rss += int(line.split()[1])*1024
                 except FileNotFoundError: pass
-            if self.mode == 'docker':
+            if self.mode.startswith('docker'):
                 stats = subprocess.run(['docker', 'stats', '--no-stream', '--format', '{{json .}}'],
                                        capture_output=True, text=True, timeout=10, check=True)
                 sizes = []
@@ -169,11 +169,12 @@ class Verification:
                 self.terminate(worker)
                 self.isolation()
             else:
-                self.smoke(['xgboost', 'pytorch-mlp', 'pytorch-tft', 'lag-24', 'lag-168', 'tensorflow-lstm'], 'docker-all-six')
-                self.invalid_requests()
+                if self.mode == 'docker':
+                    self.smoke(['xgboost', 'pytorch-mlp', 'pytorch-tft', 'lag-24', 'lag-168', 'tensorflow-lstm'], 'docker-all-six')
+                    self.invalid_requests()
                 self.run(['docker', 'compose', '-f', 'compose.station.yaml', '--profile', 'lstm', 'stop', 'lstm-worker'], 'docker-worker-stop')
                 self.isolation()
-                self.run(['docker', 'compose', '-f', 'compose.station.yaml', '--profile', 'lstm', 'start', '--wait', 'lstm-worker'], 'docker-worker-restart')
+                self.restart_worker()
                 self.smoke(['tensorflow-lstm'], 'docker-worker-recovered')
             if self.failure: raise RuntimeError(self.failure)
             self.summary['success'] = True
@@ -188,6 +189,20 @@ class Verification:
             Path('verification-reports').mkdir(exist_ok=True)
             Path(f'verification-reports/{self.mode}.json').write_text(json.dumps(self.summary, indent=2)+'\n')
 
+    def restart_worker(self):
+        """Separate container start from bounded application-level readiness."""
+        import httpx
+        self.run(['docker', 'compose', '-f', 'compose.station.yaml', '--profile', 'lstm',
+                  'start', 'lstm-worker'], 'docker-worker-restart')
+        with httpx.Client(base_url='http://127.0.0.1:8000', trust_env=False, timeout=5) as client:
+            deadline = time.monotonic()+90
+            while time.monotonic() < deadline:
+                if self.failure: raise RuntimeError(self.failure)
+                rows = client.get('/models').json()['models']
+                if any(row['id'] == 'tensorflow-lstm' and row['ready'] for row in rows): return
+                time.sleep(1)
+        raise RuntimeError('Restarted worker did not become application-ready within 90 seconds')
+
     def isolation(self):
         import httpx
         payload = json.loads((ROOT/'demo-request.json').read_text())
@@ -201,7 +216,7 @@ class Verification:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--mode', choices=['native', 'docker', 'tft-reference'], required=True)
+    parser.add_argument('--mode', choices=['native', 'docker', 'docker-recovery', 'tft-reference'], required=True)
     parser.add_argument('--worker-python', default='.worker/bin/python')
     args = parser.parse_args()
     if args.mode == 'tft-reference':

@@ -96,3 +96,20 @@ custom role can be deleted separately with approval. Do not disable shared IAM
 APIs or remove pilot bindings. Disabling trust blocks new exchanges; previously
 issued short-lived tokens may remain valid until expiry. None of these revocation
 steps deletes GCS data.
+
+## First measured run and targeted recovery check
+
+[Run 40707527557](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40707527557)
+passed 174 selected framework/contract regressions (zero test failures/skips),
+all six native HTTP checks, and all six container HTTP checks. Native LSTM
+maximum saved-reference difference was 0.000004168 rides; XGBoost was exact,
+MLP differed by 0.000005133, and TFT matched the original forward path exactly.
+All seven invalid request cases and worker-failure isolation passed.
+
+The run failed at the Compose `start --wait` recovery command after those checks;
+the exact underlying command diagnostic was not exported from the private workspace.
+This does not invalidate the preceding model parity. Recovery now separates plain
+`start` from a bounded 90-second application-readiness poll, with a regression test.
+The manual `docker-recovery` scope repeats only the affected container isolation,
+restart and LSTM parity checks, not native inference, regressions or any benchmark.
+Release completion still requires this recovery check to pass.
