@@ -22,6 +22,8 @@ class State(TypedDict, total=False):
     result: dict
     explanation: str
     trace: Annotated[list[dict], operator.add]
+    sql_attempts: Annotated[list[str], operator.add]
+    query_errors: Annotated[list[str], operator.add]
 
 
 def build_graph(tools, backend):
@@ -48,7 +50,7 @@ def build_graph(tools, backend):
                         'attempts': attempt, 'trace': [{'node': 'generate_sql', 'outcome': 'clarification', 'attempt': attempt}]}
             if set(decision) != {'sql'} or not isinstance(decision['sql'], str) or not 0 < len(decision['sql'].encode()) <= 4096:
                 raise ValueError('Invalid SQL decision')
-            return {'sql': decision['sql'], 'attempts': attempt, 'status': 'execute',
+            return {'sql': decision['sql'], 'sql_attempts': [decision['sql']], 'attempts': attempt, 'status': 'execute',
                     'trace': [{'node': 'generate_sql', 'outcome': 'sql', 'attempt': attempt,
                                'sql_sha256': hashlib.sha256(decision['sql'].encode()).hexdigest()}]}
         except Exception:
@@ -61,8 +63,9 @@ def build_graph(tools, backend):
             result = await tools.call('sqlpilot_query', {'sql': state['sql']})
             return {'result': result, 'status': 'explain', 'tool_calls': count,
                     'trace': [{'node': 'execute_sql', 'outcome': 'success', 'rows': len(result['rows'])}]}
-        except ToolError:
-            return {'error': 'SQL was rejected or could not bind/execute against the permitted schema',
+        except ToolError as error:
+            return {'query_errors': [str(error)[:1000]],
+                    'error': 'SQL was rejected or could not bind/execute against the permitted schema',
                     'status': 'repair' if state['attempts'] < 2 and count < 3 else 'error', 'tool_calls': count,
                     'trace': [{'node': 'execute_sql', 'outcome': 'rejected', 'attempt': state['attempts']}]}
         except Exception:

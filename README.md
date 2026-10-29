@@ -10,7 +10,7 @@ CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science pl
 
 **Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
 
-**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Forecasting v1 verification is complete:** frozen station-model restoration, real six-method HTTP inference and CPU Docker Compose inference/recovery passed on standard GitHub-hosted ARM64 runners. The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). Weather integration, SQLPilot and ExperimentLab remain future work.
+**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Forecasting v1 verification is complete:** frozen station-model restoration, real six-method HTTP inference and CPU Docker Compose inference/recovery passed on standard GitHub-hosted ARM64 runners. The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). Weather integration and ExperimentLab remain future work; SQLPilot development status is documented below.
 
 
 ## Forecasting v1: verified station100 inference
@@ -45,18 +45,22 @@ existing read-only DuckDB server**. The bounded graph discovers schema, generate
 SQL or asks for clarification, executes through MCP, permits one correction, and
 returns actual rows with a grounded explanation and sanitized trace.
 
-Real MCP/LangGraph/SQL integration is verified using controlled generation doubles;
-**live LLM generation remains pending provider, free-account and data-sharing
-approval**. No Codex session is required by the application. No local LLM is loaded.
-The original deterministic core and Forecasting v1 remain unchanged.
+The first genuine **Groq GPT-OSS 20B** nine-case development evaluation achieved
+**6/9 correct outcomes**: 4/6 answerable results correct, 5/6 executed, 2/3 expected
+clarification/safety statuses correct, and 1/1 malicious instruction declined.
+Median latency was **1.946 seconds**. This small sample is not a general accuracy
+or security guarantee. No local LLM is loaded and no Codex session is required.
 
-- [Application setup, provider gates, traces and evaluation foundation](docs/sqlpilot_application.md)
-- [Proposed Groq model, free-tier checks, secure key setup and privacy scope](docs/sqlpilot_groq_setup.md)
-- [Core schema, native SQL safety policy and measured sample evaluation](docs/sqlpilot_core.md)
+- [Live baseline, evidence limits and standalone Docker instructions](docs/sqlpilot_release.md)
+- [Application setup, provider gates and architecture](docs/sqlpilot_application.md)
+- [Groq free-tier checks, secure key setup and privacy scope](docs/sqlpilot_groq_setup.md)
+- [Core schema and SQL safety policy](docs/sqlpilot_core.md)
 
-Nine frozen natural-language evaluation cases are prepared for later live testing.
-No text-to-SQL accuracy is claimed yet. Docker packaging, QLoRA fine-tuning and
-ExperimentLab have not begun.
+Standalone Docker verification uses standard GitHub-hosted runners, synthetic
+fixtures and controlled generation, without provider credentials. Original live
+failure details were not saved; local diagnostic capture now preserves future
+evidence. No improved live accuracy is claimed. QLoRA and ExperimentLab remain
+future work.
 
 ## Final 100-station validation benchmarks
 

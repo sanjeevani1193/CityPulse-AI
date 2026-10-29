@@ -79,3 +79,23 @@ def test_evaluation_stops_after_provider_error(monkeypatch):
         {'id':'b','question':'b','expected':'clarification'}]},backend))
     assert len(calls)==1 and r['cases_not_run']==1 and r['stopped_reason']=='provider_http_429'
     assert r['clarification_cases']==1 and r['clarification_cases_planned']==2
+
+
+def test_evaluation_retains_local_sql_rows_and_error_evidence(sample):
+    specification={'version':'diagnostics-test','cases':[
+        {'id':'sum','question':'Sum recorded starts',
+         'reference_sql':'SELECT sum(ride_count) FROM hourly_rides'}]}
+    backend=Scripted({'sql':'SELECT missing FROM hourly_rides'},
+                     {'sql':'SELECT sum(ride_count) FROM hourly_rides'})
+    report=asyncio.run(evaluate(sample,specification,backend))
+    case=report['cases'][0]
+    assert case['correct']
+    assert case['sql_attempts']==['SELECT missing FROM hourly_rides',
+                                  'SELECT sum(ride_count) FROM hourly_rides']
+    assert len(case['query_errors'])==1
+    assert case['actual_result']['rows']==case['reference_result']['rows']==[[6]]
+    assert any(step['node']=='repair' for step in case['agent_trace'])
+    assert any(call.get('is_error') for call in case['mcp_trace'])
+    # Reference SQL/results and diagnostic rows never enter generation feedback.
+    assert 'rows' not in backend.calls[1][0]
+    assert 'SELECT sum(ride_count)' not in backend.calls[1][0]

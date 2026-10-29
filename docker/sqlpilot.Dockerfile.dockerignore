@@ -1,0 +1,13 @@
+**
+!requirements/
+!requirements/sqlpilot-app.txt
+!requirements/sqlpilot-app.lock.txt
+!src/
+!src/citypulse_ai/
+!src/citypulse_ai/__init__.py
+!src/citypulse_ai/sqlpilot/
+!src/citypulse_ai/sqlpilot/*.py
+!.streamlit/
+!.streamlit/config.toml
+**/__pycache__/
+**/*.pyc

@@ -48,6 +48,13 @@ async def evaluate(database, specification, backend, *, pause_seconds=65):
             'live_llm_exercised': result.get('live_llm_exercised', False),
             'live_llm_attempted': result.get('live_llm_attempted', False),
             'latency_seconds': result.get('latency_seconds'), 'attempts': result.get('attempts', 0),
+            # Local diagnostic evidence only: never sent to the model or telemetry.
+            'sql_attempts': result.get('sql_attempts', []),
+            'query_errors': result.get('query_errors', []),
+            'actual_result': result.get('result'),
+            'reference_result': reference if expected is not None else None,
+            'clarification': result.get('clarification'), 'error': result.get('error'),
+            'agent_trace': result.get('trace', []), 'mcp_trace': result.get('mcp_trace', []),
             'query_tool_rejections': sum(x.get('is_error', False) for x in result.get('mcp_trace', []) if x.get('tool') == 'sqlpilot_query')})
         http_status = getattr(backend, 'last_http_status', None)
         if http_status is not None and http_status >= 400:

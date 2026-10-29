@@ -1,8 +1,9 @@
 # SQLPilot application: LangGraph + MCP + Streamlit
 
 This milestone implements a standalone application, not a Codex wrapper. The
-application owns its LangGraph invocation and official MCP SDK client. **Live LLM
-execution is pending provider/account/data-sharing approval.** Mocked generation
+application owns its LangGraph invocation and official MCP SDK client. **A first genuine live baseline is now recorded in
+[the evaluation and Docker release guide](sqlpilot_release.md).** Further live calls
+remain subject to provider/account/data-sharing approval. Mocked generation
 is never presented as text-to-SQL accuracy.
 
 ## Implemented flow
@@ -206,7 +207,7 @@ Approve a provider, current free allowance, explicit model and outbound schema/
 question scope, then exercise genuine LLM generation and evaluate the frozen set.
 The current agent/UI milestone is **not SQLPilot v1 accuracy certification**. MCP
 protocol expansion, persistent dialogue, authentication for any hosted UI and
-Docker packaging remain future work. LangGraph is now real orchestration; expanded
+Docker verification are documented in the release guide. LangGraph is now real orchestration; expanded
 MCP, vLLM and possible QLoRA remain roadmap goals, with no fine-tuning started.
 
 ## Streamlit MCP import isolation

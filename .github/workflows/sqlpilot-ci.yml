@@ -2,10 +2,10 @@ name: SQLPilot deterministic core
 'on':
   push:
     branches: [main]
-    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml']
+    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml', 'docker/sqlpilot*', 'docker/verify_sqlpilot.py', 'compose.sqlpilot.yaml']
   pull_request:
     branches: [main]
-    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml']
+    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml', 'docker/sqlpilot*', 'docker/verify_sqlpilot.py', 'compose.sqlpilot.yaml']
 permissions:
   contents: read
 jobs:
@@ -48,3 +48,51 @@ jobs:
           python -m venv .sqlpilot-core
           .sqlpilot-core/bin/python -m pip install --only-binary=:all: duckdb==1.5.6 pytz==2026.5
       - run: python -m pytest tests/test_sqlpilot_app.py tests/test_sqlpilot_live_preparation.py -q --tb=short
+
+  container:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      SQLPILOT_SAMPLE_DATABASE: ${{ runner.temp }}/sqlpilot-sample/sample.duckdb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Validate configuration and build SQLPilot only
+        run: |
+          git diff --check
+          docker compose -f compose.sqlpilot.yaml config --quiet
+          docker build --check -f docker/sqlpilot.Dockerfile .
+          docker compose -f compose.sqlpilot.yaml build
+      - name: Create small synthetic sample (no historical download)
+        run: |
+          mkdir -p "$RUNNER_TEMP/sqlpilot-sample"
+          chmod 777 "$RUNNER_TEMP/sqlpilot-sample"
+          docker run --rm --network none --read-only --tmpfs /tmp:size=128m \
+            -v "$PWD/tests:/app/tests:ro" \
+            -v "$RUNNER_TEMP/sqlpilot-sample:/fixture" \
+            citypulse-sqlpilot:local python -c \
+            'from pathlib import Path; from tests.test_sqlpilot import sample; sample.__wrapped__(Path("/fixture"))'
+      - name: Run regression tests in the image without network or provider credentials
+        run: |
+          docker run --rm --network none --read-only --memory 768m --cpus 1 --pids-limit 64 \
+            --tmpfs /tmp:size=128m --tmpfs /home/sqlpilot:uid=10001,gid=10001,size=16m \
+            -v "$PWD/tests:/app/tests:ro" \
+            citypulse-sqlpilot:local python -m pytest -p no:cacheprovider \
+            tests/test_sqlpilot.py tests/test_sqlpilot_app.py tests/test_sqlpilot_live_preparation.py -q --tb=short
+      - name: Start and interact with Streamlit over real HTTP and WebSocket
+        run: |
+          docker compose -f compose.sqlpilot.yaml up -d --wait --wait-timeout 90
+          docker compose -f compose.sqlpilot.yaml exec -T sqlpilot python - < docker/verify_sqlpilot.py
+          docker image inspect citypulse-sqlpilot:local --format 'Image bytes: {{.Size}}'
+          docker stats --no-stream --format 'Container: {{.Name}} RAM: {{.MemUsage}} CPU: {{.CPUPerc}} PIDs: {{.PIDs}}'
+          docker system df
+          df -h
+          free -h
+      - name: Logs and cleanup (runner-owned test container only)
+        if: always()
+        run: |
+          docker compose -f compose.sqlpilot.yaml logs --no-color
+          docker compose -f compose.sqlpilot.yaml down
