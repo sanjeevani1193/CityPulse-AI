@@ -144,10 +144,16 @@ of its 768 MiB limit**, 0.29% CPU and six PIDs. Runner RAM was 15 GiB total with
 memory, exclusive SQLPilot disk growth, or a guarantee for arbitrary queries.
 No Docker build or container ran on the Mac.
 
-The first pushed workflow was rejected before jobs started because the sample
-path referenced `runner.temp` at job-level `env`; it was corrected to use
-`$RUNNER_TEMP` in a runner step. The corrected run above passed without weakening
-any resource or SQL safeguards.
+The initial run for `38a633a` was rejected before jobs started. Its actual
+[run annotation](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40949520472)
+reported `(Line: 58, Col: 33): Unrecognized named-value: 'runner'. Located at
+position 1 within expression: runner.temp`. This was workflow expression
+validation, not an absent trigger, insufficient permissions or test failure.
+The sample path incorrectly referenced `runner.temp` at job-level `env`; commit
+`b6ac4e5` moved it to `$RUNNER_TEMP` in a runner step. The corrected run above
+passed all jobs without weakening resource or SQL safeguards. Documentation-only
+changes now trigger SQLPilot checks too, and manual dispatch permits a fresh
+verification on `main` without changing application code or enabling providers.
 
 **Release scope:** standalone Docker packaging and the existing safe application
 path are verified. Exact diagnosis of the two SQL failures and improved live

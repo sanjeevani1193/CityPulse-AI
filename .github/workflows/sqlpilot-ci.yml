@@ -1,11 +1,12 @@
 name: SQLPilot deterministic core
 'on':
+  workflow_dispatch:
   push:
     branches: [main]
-    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml', 'docker/sqlpilot*', 'docker/verify_sqlpilot.py', 'compose.sqlpilot.yaml']
+    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml', 'docker/sqlpilot*', 'docker/verify_sqlpilot.py', 'compose.sqlpilot.yaml', 'docs/sqlpilot*.md', 'README.md']
   pull_request:
     branches: [main]
-    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml', 'docker/sqlpilot*', 'docker/verify_sqlpilot.py', 'compose.sqlpilot.yaml']
+    paths: ['src/citypulse_ai/sqlpilot/**', 'tests/test_sqlpilot*.py', 'tests/fixtures/sqlpilot_questions.json', 'requirements/sqlpilot-app*.txt', '.streamlit/config.toml', '.github/workflows/sqlpilot-ci.yml', 'pyproject.toml', 'docker/sqlpilot*', 'docker/verify_sqlpilot.py', 'compose.sqlpilot.yaml', 'docs/sqlpilot*.md', 'README.md']
 permissions:
   contents: read
 jobs:
