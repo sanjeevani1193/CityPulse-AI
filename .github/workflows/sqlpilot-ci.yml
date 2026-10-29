@@ -54,12 +54,12 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: read
-    env:
-      SQLPILOT_SAMPLE_DATABASE: ${{ runner.temp }}/sqlpilot-sample/sample.duckdb
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           persist-credentials: false
+      - name: Configure runner-local sample path
+        run: echo "SQLPILOT_SAMPLE_DATABASE=$RUNNER_TEMP/sqlpilot-sample/sample.duckdb" >> "$GITHUB_ENV"
       - name: Validate configuration and build SQLPilot only
         run: |
           git diff --check
