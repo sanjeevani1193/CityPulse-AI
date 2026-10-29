@@ -121,7 +121,7 @@ synthetic fixtures; the existing local sample is gitignored and not redistribute
 ## MCP-compatible tools
 
 ```sh
-PYTHONPATH=src .venv/bin/python -m citypulse_ai.sqlpilot.mcp \
+PYTHONPATH=src .venv/bin/python -m citypulse_ai.sqlpilot.mcp_server \
   --database outputs/historical/samples/2024-01-n1000/citypulse.duckdb
 ```
 

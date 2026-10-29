@@ -34,7 +34,7 @@ thread, five-second worker deadline, disabled external access/spill, 100 rows an
 128 KiB response cap. See [core security boundary](sqlpilot_core.md).
 
 The agent imports no DuckDB executor: `client.py` uses the **official MCP SDK**,
-starts the existing stdio server, initializes it, discovers the two tools and calls
+starts `citypulse_ai.sqlpilot.mcp_server`, initializes it, discovers the two tools and calls
 `sqlpilot_schema` / `sqlpilot_query`. Real calls negotiated protocol **2025-03-26**
 with SDK 1.26.0. Only an operator may select the database or interpreter; neither
 can be supplied by a question, generated SQL or tool arguments. Provider credentials
@@ -208,3 +208,18 @@ The current agent/UI milestone is **not SQLPilot v1 accuracy certification**. MC
 protocol expansion, persistent dialogue, authentication for any hosted UI and
 Docker packaging remain future work. LangGraph is now real orchestration; expanded
 MCP, vLLM and possible QLoRA remain roadmap goals, with no fine-tuning started.
+
+## Streamlit MCP import isolation
+
+The internal stdio server is named `mcp_server.py`. Streamlit places the directory
+containing `ui.py` on Python's import path; naming our server `mcp.py` caused
+`from mcp import ClientSession` to resolve to that local file instead of the
+installed official SDK. The distinct server name avoids this collision without
+changing the import path or the SQL security boundary. A fresh-process regression
+test places the UI directory first before importing the SDK, client and UI.
+
+Verification: 64 SQLPilot core/application/provider-preparation tests passed.
+Using `.venv-sqlpilot/bin/python -m streamlit run src/citypulse_ai/sqlpilot/ui.py`,
+a real localhost WebSocket session executed the UI without exceptions and rendered
+the application title; `/` and `/_stcore/health` returned HTTP 200. The process
+was terminated and reaped afterward. No external LLM calls were made.

@@ -8,7 +8,7 @@ import duckdb
 import pytest
 from citypulse_ai.sqlpilot.core import SafeDatabase, QueryRejected, connect, schema, validate
 from citypulse_ai.sqlpilot.agent import SQLPilot
-from citypulse_ai.sqlpilot.mcp import Server
+from citypulse_ai.sqlpilot.mcp_server import Server
 
 
 @pytest.fixture
@@ -111,7 +111,7 @@ def test_mcp_lifecycle_and_unsafe_tool(sample):
 def test_stdio_mcp_real_process(sample):
     messages=[{'jsonrpc':'2.0','id':1,'method':'initialize','params':{'protocolVersion':'2025-03-26','clientInfo':{'name':'test'},'capabilities':{}}},
               {'jsonrpc':'2.0','method':'notifications/initialized'}, {'jsonrpc':'2.0','id':2,'method':'tools/list'}]
-    p=subprocess.run([sys.executable,'-m','citypulse_ai.sqlpilot.mcp','--database',str(sample)],input='\n'.join(map(json.dumps,messages))+'\n',text=True,capture_output=True,timeout=10)
+    p=subprocess.run([sys.executable,'-m','citypulse_ai.sqlpilot.mcp_server','--database',str(sample)],input='\n'.join(map(json.dumps,messages))+'\n',text=True,capture_output=True,timeout=10)
     assert p.returncode==0 and len(p.stdout.splitlines())==2
     assert json.loads(p.stdout.splitlines()[1])['result']['tools'][0]['name']=='sqlpilot_schema'
 

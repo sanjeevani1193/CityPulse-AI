@@ -177,3 +177,27 @@ def test_prior_provider_success_is_not_current_live_evidence(sample):
     result=ask(sample,PreviouslySuccessful())
     assert result['status']=='error'
     assert not result['live_llm_exercised'] and not result['live_llm_attempted']
+
+
+def test_streamlit_script_directory_does_not_shadow_official_mcp():
+    """Use a fresh process: pre-importing the SDK can hide this collision."""
+    import subprocess
+    import sys
+    script_directory = Path('src/citypulse_ai/sqlpilot').resolve()
+    code = """
+import sys
+from pathlib import Path
+sys.path.insert(0, sys.argv[1])
+import mcp
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+from citypulse_ai.sqlpilot import client, ui, mcp_server
+assert Path(mcp.__file__).name == '__init__.py'
+assert Path(mcp.__file__).parent != Path(sys.argv[1])
+assert client.ClientSession is ClientSession
+print('Official MCP SDK, client, UI and internal server imports passed')
+"""
+    result = subprocess.run([sys.executable, '-c', code, str(script_directory)],
+                            text=True, capture_output=True, timeout=30)
+    assert result.returncode == 0, result.stderr
+    assert 'imports passed' in result.stdout

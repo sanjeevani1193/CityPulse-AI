@@ -44,7 +44,7 @@ async def connect_tools(database):
     if not Path(interpreter).is_absolute() or not Path(interpreter).is_file():
         raise ToolError('Operator MCP interpreter must be an existing absolute path')
     parameters = StdioServerParameters(command=interpreter,
-        args=['-m', 'citypulse_ai.sqlpilot.mcp', '--database', str(Path(database).absolute())],
+        args=['-m', 'citypulse_ai.sqlpilot.mcp_server', '--database', str(Path(database).absolute())],
         env={'PYTHONPATH': str(root), 'PYTHONDONTWRITEBYTECODE': '1',
              'OMP_NUM_THREADS': '1', 'OPENBLAS_NUM_THREADS': '1'})
     async with stdio_client(parameters) as (read, write):
