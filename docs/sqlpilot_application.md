@@ -184,7 +184,7 @@ PYTHONPATH=src .venv/bin/python -m pytest tests/test_sqlpilot.py -q
 queries with reference SQL and synthetic-fixture expected rows; ambiguity,
 unobserved physical demand and prompt injection require clarification. References
 are verified through real MCP. Fixture expected values are never asserted as real
-historical counts. The future evaluator recomputes reference rows through MCP on
+historical counts. The evaluator recomputes reference rows through MCP on
 the operator-selected database and scores actual generated results with numerical
 tolerance, execution status, clarification status, query-tool rejections and latency.
 Clarification-content quality will additionally need human review.
@@ -203,8 +203,9 @@ its possible token/request demand exceeds the verified free quota.
 
 ## Remaining milestone
 
-Approve a provider, current free allowance, explicit model and outbound schema/
-question scope, then exercise genuine LLM generation and evaluate the frozen set.
+The first approved Groq baseline completed all nine frozen cases; see the release
+guide for measured results and missing diagnostic evidence. Further calls require
+continued approval and verified free allowance; no improved accuracy is claimed.
 The current agent/UI milestone is **not SQLPilot v1 accuracy certification**. MCP
 protocol expansion, persistent dialogue, authentication for any hosted UI and
 Docker verification are documented in the release guide. LangGraph is now real orchestration; expanded

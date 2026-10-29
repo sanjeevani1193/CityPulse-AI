@@ -123,9 +123,35 @@ are printed to reproducible Actions logs. A single usage sample is not a memory
 safety guarantee.
 
 Local verification: **65 tests passed** after adding diagnostic evidence capture;
-workflow and Compose YAML parsed and whitespace checks passed. Container build,
-HTTP interaction and resource observations must be confirmed by the remote CI
-run before calling packaging verified. Live baseline failure analysis and any
-accuracy improvement remain separate from packaging readiness.
+workflow and Compose YAML parsed and whitespace checks passed.
+
+**Hosted packaging verification passed** on revision `b6ac4e5`:
+[SQLPilot CI run 40949596948](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40949596948).
+All three jobs succeeded: 42 core tests, 23 application/provider-preparation tests,
+and all 65 tests again in the offline restricted image. The real HTTP/WebSocket
+check rendered the UI and clicked the schema button; MCP negotiated `2025-03-26`,
+discovered both tools and executed the LangGraph query. Clarification routing and
+unsafe-SQL rejection passed. Generation in those hosted checks was controlled,
+not live Groq inference. Compose reported healthy and its test container/network
+were removed by the runner's cleanup step.
+
+Measured image size: **806,594,684 bytes (769.23 MiB)**. The allowlisted application
+build context transferred 49.42 kB. A post-check container sample was **92.96 MiB
+of its 768 MiB limit**, 0.29% CPU and six PIDs. Runner RAM was 15 GiB total with
+14 GiB available; swap use was zero. Docker reported 3.294 GB across seven images
+(including pre-existing runner images), zero container writable-layer bytes and
+49.85 kB reported build cache. These are observations from this run, not peak
+memory, exclusive SQLPilot disk growth, or a guarantee for arbitrary queries.
+No Docker build or container ran on the Mac.
+
+The first pushed workflow was rejected before jobs started because the sample
+path referenced `runner.temp` at job-level `env`; it was corrected to use
+`$RUNNER_TEMP` in a runner step. The corrected run above passed without weakening
+any resource or SQL safeguards.
+
+**Release scope:** standalone Docker packaging and the existing safe application
+path are verified. Exact diagnosis of the two SQL failures and improved live
+accuracy remain blocked by missing baseline evidence. Do not describe the three
+baseline failures as fixed or call this an accuracy-certified SQLPilot release.
 
 No QLoRA, ExperimentLab, historical ETL or Forecasting v1 changes are included.

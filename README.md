@@ -56,8 +56,11 @@ or security guarantee. No local LLM is loaded and no Codex session is required.
 - [Groq free-tier checks, secure key setup and privacy scope](docs/sqlpilot_groq_setup.md)
 - [Core schema and SQL safety policy](docs/sqlpilot_core.md)
 
-Standalone Docker verification uses standard GitHub-hosted runners, synthetic
-fixtures and controlled generation, without provider credentials. Original live
+Standalone Docker build, HTTP/WebSocket interaction and MCP execution
+[passed on GitHub-hosted Ubuntu](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40949596948):
+65 tests passed in the offline image, using synthetic fixtures and controlled
+generation without provider credentials. Image size is about 769 MiB; sampled
+runtime RAM was 92.96 MiB (not a measured peak). Original live
 failure details were not saved; local diagnostic capture now preserves future
 evidence. No improved live accuracy is claimed. QLoRA and ExperimentLab remain
 future work.
@@ -142,8 +145,8 @@ ExperimentLab --> statistical analysis and A/B testing
 ```
 
 DuckDB provides the SQL warehouse. Seasonal baselines, PyTorch, TensorFlow and
-XGBoost forecasting implementations are available. SQLPilot will eventually
-use a fine-tuned text-to-SQL model with MCP, LangGraph, and vLLM. Docker Compose
+XGBoost forecasting implementations are available. SQLPilot uses hosted SQL generation with MCP and LangGraph; fine-tuning and
+vLLM remain optional roadmap work. Docker Compose
 and inference CI are implemented; Kubernetes and production cloud hosting remain
 later deployment phases. The original
 full scope remains unchanged: ARIMA, XGBoost, PyTorch, TensorFlow, LSTM, TFT,
@@ -172,7 +175,7 @@ incrementally with measured experiments; this is not a reduced MVP.
 │       ├── forecasting/      # Baselines and future forecasting models
 │       ├── evaluation/       # Backtesting and forecast metrics
 │       ├── experiments/      # ExperimentLab statistical analysis
-│       └── sqlpilot/         # Read-only SQL/MCP core; LLM backend pending
+│       └── sqlpilot/         # Streamlit/LangGraph/MCP; hosted LLM baseline
 └── tests/
     ├── fixtures/             # Synthetic valid, invalid, empty, and DST CSVs
     ├── test_etl.py            # Validation, aggregation, persistence, and CLI tests
@@ -182,8 +185,9 @@ incrementally with measured experiments; this is not a reduced MVP.
 The ETL package contains the implemented trip pipeline, and
 `features/reporting.py` prepares the reviewed February reporting dataset.
 `features/preparation.py` creates forecasting grids and coverage audits, with a
-module CLI in `features/cli.py`. Forecasting and evaluation contain implemented models and metrics; ExperimentLab
-and SQLPilot remain future work. The `src/` layout separates
+module CLI in `features/cli.py`. Forecasting and evaluation contain implemented models and metrics;
+SQLPilot has a standalone agent application and measured live baseline. ExperimentLab
+remains future work. The `src/` layout separates
 importable code from repository files.
 
 ## Local setup and tests
@@ -594,8 +598,9 @@ ingestion remains future ETL work.
    artifacts, and pipeline monitoring.
 6. **Application layer:** expose forecasts and analytics through FastAPI and
    Streamlit.
-7. **SQLPilot:** prepare text-to-SQL training/evaluation data, fine-tune a model,
-   and integrate MCP, LangGraph, and vLLM with query safeguards.
+7. **SQLPilot:** Streamlit, LangGraph, MCP, read-only SQL safeguards and a hosted
+   LLM development baseline are implemented. Diagnose retained live failures before
+   accuracy claims; fine-tuning and vLLM remain optional later work.
 8. **ExperimentLab:** add A/B test design, statistical analysis, uncertainty
    estimates, and experiment reporting.
 9. **Deployment:** containerize, add CI/CD, then introduce Kubernetes and cloud
