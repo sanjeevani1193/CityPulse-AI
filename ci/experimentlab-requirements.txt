@@ -1,0 +1,4 @@
+# Lightweight CPU statistics only; tested Python 3.14, no ML/cloud frameworks.
+numpy==2.5.3
+scipy==1.18.1
+pytest==9.1.1

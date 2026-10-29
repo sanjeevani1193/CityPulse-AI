@@ -1,3 +1,4 @@
+# CityPulse AI
 
 CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science platform** for urban mobility demand forecasting using NYC Citi Bike data. It combines large-scale data engineering, time-series forecasting, deep learning, cloud infrastructure, and reproducible ML workflows.
 
@@ -10,7 +11,47 @@ CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science pl
 
 **Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
 
-**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Forecasting v1 verification is complete:** frozen station-model restoration, real six-method HTTP inference and CPU Docker Compose inference/recovery passed on standard GitHub-hosted ARM64 runners. The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). Weather integration and ExperimentLab remain future work; SQLPilot development status is documented below.
+**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Forecasting v1 verification is complete:** frozen station-model restoration, real six-method HTTP inference and CPU Docker Compose inference/recovery passed on standard GitHub-hosted ARM64 runners. The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). The three-component repository now also includes SQLPilot and ExperimentLab; their distinct evidence and limitations are summarized below. Weather integration and production hosting remain outside this release.
+
+
+## Three-component release
+
+| Component | Implemented system | Evidence type and result | Run / reproduce |
+| --- | --- | --- | --- |
+| Forecasting v1 | Memory-bounded ETL; six station forecasting methods; FastAPI, Docker, MLflow, GCS recovery | **Real recorded data:** 89,995,902 accepted starts; 220,800 matched held-out targets; XGBoost MAE 3.3663, TFT 3.7696. MLP/LSTM are a follow-up after initial test disclosure. | [Frozen benchmark](docs/six_model_followup_benchmark.md) · [Serving demo](docs/forecasting_v1.md) |
+| SQLPilot v1 | Streamlit → LangGraph → official MCP SDK → read-only DuckDB, hosted Groq | **Genuine live LLM:** 6/9 development cases correct; incomplete original failure evidence. Docker/HTTP/MCP verified separately with controlled generation. | [Setup, security, Docker and limitations](docs/sqlpilot_release.md) |
+| ExperimentLab v1 | Seeded station randomization, Welch inference, power/MDE, pre-only CUPED, self-contained HTML/SVG report | **Fully simulated:** CUPED effect +2.7531 [1.7190, 3.7871]; 99.358% effect-variance reduction under stable synthetic rates. Practical threshold +2 remains uncertain. | [Design and measured results](docs/experimentlab.md) · [HTML report](docs/experimentlab_report.html) |
+
+```mermaid
+flowchart LR
+    A[Validated Citi Bike history] --> B[Forecasting: frozen models and FastAPI]
+    C[Approved small analytical sample] --> D[SQLPilot: Streamlit and LangGraph]
+    D --> E[MCP tools and read-only DuckDB]
+    F[Seeded synthetic station experiment] --> G[ExperimentLab: inference, power and CUPED]
+    G --> H[Reproducible HTML report]
+```
+
+The experiment does not demonstrate a real causal intervention, and the SQLPilot
+baseline does not establish general SQL accuracy. The forecasting task predicts
+accepted recorded starts, not unconstrained physical demand. Existing tests and
+CI remain separate from model training and live benchmark evaluation.
+
+### Lightweight ExperimentLab demo
+
+```sh
+PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+  .venv/bin/python -m citypulse_ai.experiments.redistribution \
+  --output outputs/experimentlab/my-new-run
+```
+
+Use the existing statistics environment, or the pinned
+`ci/experimentlab-requirements.txt` in a separate Python 3.14 environment.
+Open the generated `report.html`; no datasets, APIs, Docker or cloud services
+are needed. See the component guides above for their independent installation
+and demo requirements. Credentials, historical data and model weights remain
+outside Git. CI: [Inference](https://github.com/sanjeevani1193/CityPulse-AI/actions/workflows/ci.yml),
+[SQLPilot](https://github.com/sanjeevani1193/CityPulse-AI/actions/workflows/sqlpilot-ci.yml),
+[ExperimentLab](https://github.com/sanjeevani1193/CityPulse-AI/actions/workflows/experimentlab-ci.yml).
 
 
 ## Forecasting v1: verified station100 inference
@@ -186,8 +227,7 @@ The ETL package contains the implemented trip pipeline, and
 `features/reporting.py` prepares the reviewed February reporting dataset.
 `features/preparation.py` creates forecasting grids and coverage audits, with a
 module CLI in `features/cli.py`. Forecasting and evaluation contain implemented models and metrics;
-SQLPilot has a standalone agent application and measured live baseline. ExperimentLab
-remains future work. The `src/` layout separates
+SQLPilot has a standalone agent application and measured live baseline. ExperimentLab now implements the synthetic station experiment documented above. The `src/` layout separates
 importable code from repository files.
 
 ## Local setup and tests
@@ -601,8 +641,8 @@ ingestion remains future ETL work.
 7. **SQLPilot:** Streamlit, LangGraph, MCP, read-only SQL safeguards and a hosted
    LLM development baseline are implemented. Diagnose retained live failures before
    accuracy claims; fine-tuning and vLLM remain optional later work.
-8. **ExperimentLab:** add A/B test design, statistical analysis, uncertainty
-   estimates, and experiment reporting.
+8. **ExperimentLab:** completed station-randomized synthetic A/B design,
+   Welch inference, pre-only CUPED, power/MDE, tests and reproducible HTML reporting.
 9. **Deployment:** containerize, add CI/CD, then introduce Kubernetes and cloud
    infrastructure as requirements justify them.
 

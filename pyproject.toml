@@ -21,6 +21,7 @@ citypulse-etl = "citypulse_ai.etl.cli:main"
 citypulse-publish = "citypulse_ai.cloud.publish:main"
 
 [project.optional-dependencies]
+experimentlab = ["numpy>=2,<3", "scipy>=1.15,<2"]
 sqlpilot = ["duckdb==1.5.6"] # Native AST policy is tested against this exact version.
 sqlpilot-app = ["duckdb==1.5.6", "langgraph==1.2.18", "mcp==1.26.0",
                 "streamlit==1.66.1", "httpx==0.28.1", "numpy==2.4.6",
