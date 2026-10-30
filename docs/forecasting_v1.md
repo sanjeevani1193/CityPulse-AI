@@ -156,7 +156,8 @@ repeated inference, future-input rejection and saved reference parity where
 available (`rtol=1e-5`, `atol=1e-4`). No saved per-target TFT validation export
 exists: that parity is not claimed. A separate frozen synthetic restore probe
 matched its original normalized-output hash exactly; the real-window original TFT
-forward versus HTTP comparison still awaits safe service execution.
+forward versus HTTP comparison subsequently passed on the hosted runner (error 0),
+as recorded in the measured verification table below.
 
 ## Docker Compose — verified on hosted ARM64
 

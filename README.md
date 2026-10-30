@@ -1,975 +1,454 @@
 # CityPulse AI
 
-CityPulse AI is an end-to-end **Machine Learning Engineering and Data Science platform** for urban mobility demand forecasting using NYC Citi Bike data. It combines large-scale data engineering, time-series forecasting, deep learning, cloud infrastructure, and reproducible ML workflows.
+### Urban mobility forecasting · Agentic data analytics · Statistical experimentation
 
-### 🚀 Key Highlights
+**A reproducible, three-part ML and AI engineering platform built around NYC Citi Bike data.** CityPulse AI combines (1) large-scale historical data engineering and 24-hour station-level forecasting, (2) an LLM-powered text-to-SQL analyst with LangGraph and MCP, and (3) a statistically grounded *synthetic* A/B experimentation lab. Its emphasis is on measurable results, bounded and auditable execution, and repeatable verification—not a claim of production deployment or real-time streaming.
 
-- **Data Engineering:** Implemented memory-bounded ETL pipelines using Python, DuckDB, and Parquet, with validation and duplicate auditing. Finalized all 24 NYC-local months (January 2024–December 2025), containing 89,995,902 accepted recorded starts; January 2026 provides the final boundary source.
-- **Machine Learning:** Completed matched 100-station validation and held-out benchmarks: XGBoost achieved **13.43% lower clipped validation MAE** and **10.70% lower clipped test MAE** than the six-epoch TFT on the same respective targets. The frozen station MLP/LSTM follow-up completes a six-method test leaderboard; it was added after the initial test results were disclosed. Earlier citywide experiments remain separate preliminary studies.
-- **Model Serving:** Built local FastAPI-based model inference workflows with Docker support and model-specific preprocessing.
-- **MLOps & Cloud:** Integrated MLflow experiment tracking, automated GitHub Actions CI, and Google Cloud Storage with verified artifact transfers.
+[Forecasting](#forecasting) · [SQLPilot](#sqlpilot) · [ExperimentLab](#experimentlab) · [Architecture](#architecture) · [Reproduce](#reproduce) · [CI evidence](#verification) · [Limitations](#limitations) · [Documentation](#documentation)
 
-**Tech Stack:** Python · SQL · PyTorch · TensorFlow · XGBoost · DuckDB · FastAPI · Docker · MLflow · GCP
+## At a glance
 
-**Current Status:** Historical ingestion, the final 100-station dataset, frozen TFT/XGBoost/MLP/LSTM training, and the six-method held-out follow-up comparison are complete. **Forecasting v1 verification is complete:** frozen station-model restoration, real six-method HTTP inference and CPU Docker Compose inference/recovery passed on standard GitHub-hosted ARM64 runners. The original citywide services remain available unchanged. See the [station100 inference and reproducible demo guide](docs/forecasting_v1.md). The three-component repository now also includes SQLPilot and ExperimentLab; their distinct evidence and limitations are summarized below. Weather integration and production hosting remain outside this release.
+| Component | Implemented | Key verified result |
+|---|---|---|
+| **Forecasting & MLOps** | GCP-backed DuckDB/Parquet ETL; four trained ML/deep-learning models; two seasonal baselines; FastAPI, Docker and MLflow | **89,995,902** accepted starts processed; **3.3663 MAE** for XGBoost on **220,800** held-out station-hour forecasts |
+| **SQLPilot** | Streamlit UI; LangGraph workflow; local MCP client/server; Groq-hosted LLM; constrained read-only DuckDB queries | **6/9** correct overall outcomes in the initial **live** LLM evaluation; **65** container tests passed |
+| **ExperimentLab** | Randomized 100-station synthetic trial; Welch inference; CUPED; power/MDE calculations; HTML report | CUPED-adjusted synthetic effect **+2.7531** starts/station/day, 95% CI **[1.7190, 3.7871]**; **19** tests passed |
 
+> **Scope:** Forecasts estimate *accepted recorded bike starts*, not unconstrained customer demand. The SQLPilot LLM benchmark is a small, nine-case initial baseline. ExperimentLab's intervention and outcomes are fully synthetic. No continuously streaming ingest or public production deployment is claimed.
 
-## Three-component release
+## Why build this?
 
-| Component | Implemented system | Evidence type and result | Run / reproduce |
-| --- | --- | --- | --- |
-| Forecasting v1 | Memory-bounded ETL; six station forecasting methods; FastAPI, Docker, MLflow, GCS recovery | **Real recorded data:** 89,995,902 accepted starts; 220,800 matched held-out targets; XGBoost MAE 3.3663, TFT 3.7696. MLP/LSTM are a follow-up after initial test disclosure. | [Frozen benchmark](docs/six_model_followup_benchmark.md) · [Serving demo](docs/forecasting_v1.md) |
-| SQLPilot v1 | Streamlit → LangGraph → official MCP SDK → read-only DuckDB, hosted Groq | **Genuine live LLM:** 6/9 development cases correct; incomplete original failure evidence. Docker/HTTP/MCP verified separately with controlled generation. | [Setup, security, Docker and limitations](docs/sqlpilot_release.md) |
-| ExperimentLab v1 | Seeded station randomization, Welch inference, power/MDE, pre-only CUPED, self-contained HTML/SVG report | **Fully simulated:** CUPED effect +2.7531 [1.7190, 3.7871]; 99.358% effect-variance reduction under stable synthetic rates. Practical threshold +2 remains uncertain. | [Design and measured results](docs/experimentlab.md) · [HTML report](docs/experimentlab_report.html) |
+A bike-sharing operator faces three different questions:
+
+1. **What is likely to happen?** Forecast station-level bike starts over the next 24 hours.
+2. **What happened, and why?** Ask natural-language questions about approved mobility data without manually writing SQL.
+3. **Would an intervention help?** Design and analyze a randomized experiment, making uncertainty and causal assumptions explicit.
+
+These tasks belong together analytically, but they have different data contracts and evidence standards. Forecasting evaluates predictive error on future observations; SQLPilot evaluates whether generated queries produce correct database answers; ExperimentLab evaluates effect estimates and uncertainty for a *simulated* intervention. The components are integrated in a single repository, not presented as one continuously deployed production service.
+
+<a id="architecture"></a>
+
+## System architecture
 
 ```mermaid
-flowchart LR
-    A[Validated Citi Bike history] --> B[Forecasting: frozen models and FastAPI]
-    C[Approved small analytical sample] --> D[SQLPilot: Streamlit and LangGraph]
-    D --> E[MCP tools and read-only DuckDB]
-    F[Seeded synthetic station experiment] --> G[ExperimentLab: inference, power and CUPED]
-    G --> H[Reproducible HTML report]
+flowchart TB
+    A[NYC Citi Bike historical trip files] --> B["Validated, memory-bounded ETL<br/>Python + DuckDB + Parquet"]
+    B --> C["GCP Cloud Storage<br/>reproducible artifacts"]
+    B --> F["Station-hour features<br/>train / validation / test"]
+    F --> M["Six forecasting methods<br/>XGBoost, MLP, TFT, LSTM, lag-24, lag-168"]
+    M --> S["FastAPI inference<br/>CPU Docker + CI"]
+    M --> T[MLflow experiment tracking]
+
+    B --> P["Approved local sample<br/>1,998 accepted trips"]
+    U[Streamlit SQLPilot UI] --> G["LangGraph agent<br/>schema → generate → execute → explain"]
+    G -->|Question and approved schema| L["Groq GPT OSS 20B<br/>SQL generation only"]
+    L -->|SQL or clarification| G
+    G <--> MC[MCP client]
+    MC <--> MS["Custom local MCP server<br/>sqlpilot_schema / sqlpilot_query"]
+    MS --> V["SQL AST validation + limits<br/>read-only DuckDB"]
+    P --> V
+    V --> G
+
+    E[Fully synthetic 100-station experiment] --> W["Randomization + Welch test<br/>CUPED + power / MDE"]
+    W --> H[Reproducible HTML analysis report]
 ```
 
-The experiment does not demonstrate a real causal intervention, and the SQLPilot
-baseline does not establish general SQL accuracy. The forecasting task predicts
-accepted recorded starts, not unconstrained physical demand. Existing tests and
-CI remain separate from model training and live benchmark evaluation.
+**Boundary worth noting:** Groq receives approved question/schema context to generate candidate SQL; SQL validation, tool execution and result handling remain local. The MCP server exposes only named operations, not unrestricted machine access. SQLPilot is an interactive analysis tool; it does **not** access the full private historical GCS archive for each query.
 
-### Lightweight ExperimentLab demo
+---
 
-```sh
+<a id="forecasting"></a>
+
+## 1. Forecasting & data engineering
+
+### Dataset and ETL
+
+- **Coverage:** all 24 NYC-local months, January 2024–December 2025, finalized using **25 source archives**. January 2026 is a boundary source only; its January-local rides are excluded from modelling.
+- **Processed volume:** **89,995,902 accepted recorded starts** and **19,362,014 unique station-hour records** within the modelling window. The final audit found **zero duplicate ride IDs or station-hour keys**. These are accepted-record counts, not a claim that the publisher observed every physical rental.
+- **Data processing:** Memory-bounded Python/DuckDB ETL, Parquet outputs, duplicate ride-ID auditing, start-station validation, invalid-duration filtering and reconciliation checks.
+- **Time handling:** `America/New_York` calendar semantics, including daylight saving time (DST) changes; hour windows are based on **elapsed hours**, not assumptions that every local day contains exactly 24 wall-clock hours.
+- **Cloud/MLOps:** GCP Cloud Storage for reproducible data/model artifacts, MLflow experiment tracking, Docker-based inference and automated GitHub Actions verification.
+
+These historical data counts describe the overall ingestion/aggregation pipeline. The predictive benchmark uses a smaller, deliberately selected set of **100 stations**; they should not be confused with the 19.36M full-history station-hour rows.
+
+### Forecasting question and methodology
+
+**Task:** From the previous **336 elapsed hours** (14 days) of observations, predict the **next 24 elapsed hours** of accepted bike starts for each selected station, issued at the NYC local-midnight boundary.
+
+The final selector examined **2,386 stations**, found **1,828 eligible**, and froze
+exactly **100** using **January 2024–June 2025 only**. Eligibility requires at least
+**15 active local dates in every training month** and no inactivity run longer
+than **14 local dates**, including leading/trailing gaps. Rank by accepted
+training starts descending, then exact station ID ascending. These activity
+proxies do not prove station operating status. See the
+[final dataset contract](docs/final_tft_dataset.md).
+
+| Partition | Dates | Role |
+|---|---|---|
+| Train | Jan 2024–Jun 2025 | Fit models; determine station selection and training features |
+| Validation | Jul–Sep 2025 | Select/check model configurations without using the final test for fitting |
+| Held-out test | Oct–Dec 2025 | Final common comparison on **220,800 scored station-hour targets** |
+
+| Dataset quantity | Train | Validation | Test |
+|---|---:|---:|---:|
+| Unique station-hour panel rows | 1,312,700 | 220,800 | 220,900 |
+| Eligible station-origin windows | 53,300 | 9,200 | 9,200 |
+| Trusted forecast target positions | 1,279,200 | 220,800 | 220,800 |
+
+The panel totals **1,754,400** station-hours. Under
+`accepted_recorded_starts_v1`, verified absent accepted-record keys are certified
+source-scoped zeros; unverified periods fail closed. This final panel has zero
+unknown count labels, while **operating availability remains independently
+unknown** without station-status evidence. Cohort selection and all fitted
+normalization use training data only. Data loading is lazy; all tensors are not
+materialized in RAM.
+
+All methods share the exact eligible validation/test keys. Inverse scaling, where applicable, is
+followed by the predeclared `max(0, prediction)` floor; no rounding is applied.
+On November 2, 2025, both 01:00 offsets are included, but the 24-elapsed-hour
+horizon ends at 22:00 EST: **100 station-hours at 23:00 EST are unscored**.
+Spring horizons may extend into the next local date; split-crossing horizons are
+excluded. These are elapsed-hour forecasts, not padded calendar days.
+
+### Models evaluated
+
+| Method | What it contributes |
+|---|---|
+| **XGBoost** | CPU XGBoost 3.2.0; 300 trees, depth 6, learning rate 0.05, seed 42; 48 causal tabular features |
+| **PyTorch MLP** | 194 → 32 ReLU → 16 ReLU → 1; 6,785 parameters; selected `epoch-010.pt` from 15 completed epochs |
+| **PyTorch Temporal Fusion Transformer (TFT)** | Native station embeddings, variable selection, GRNs, LSTM encoder/decoder and temporal attention; six epochs; `epoch-006.pt`; q10/q50/q90 |
+| **TensorFlow LSTM** | Pooled 8,953-parameter station model; 336×16 encoder, station embedding and known-future calendar head; `epoch-018.keras` from 20 epochs |
+| **Lag-24 seasonal baseline** | Repeat the corresponding observation from 24 elapsed hours earlier |
+| **Lag-168 seasonal baseline** | Repeat the corresponding observation from 168 elapsed hours earlier |
+
+### Validation and final held-out results
+
+All values below use the fixed nonnegative clipping rule, identical targets and
+original ride-count units. Point metrics for TFT use q50. WAPE is shown in percent.
+
+| Model | Validation MAE | Validation RMSE | Validation WAPE | Test MAE ↓ | Test RMSE ↓ | Test WAPE |
+|---|---:|---:|---:|---:|---:|---:|
+| XGBoost | 4.1028 | 6.4225 | 30.008% | 3.3663 | 5.2630 | 37.123% |
+| MLP | 4.1213 | 6.4504 | 30.143% | 3.4015 | 5.3244 | 37.511% |
+| TFT | 4.7391 | 7.4922 | 34.662% | 3.7696 | 5.9449 | 41.570% |
+| LSTM | 4.5272 | 7.0553 | 33.112% | 3.8010 | 5.8195 | 41.917% |
+| Lag-24 | 6.0211 | 9.5619 | 44.038% | 4.6071 | 7.4208 | 50.806% |
+| Lag-168 | 5.2934 | 8.3116 | 38.716% | 4.7665 | 7.7200 | 52.563% |
+
+**How to read these metrics:**
+
+- **MAE (mean absolute error)** averages the absolute difference between predicted and observed recorded starts. An MAE of **3.3663** means an average absolute discrepancy of about **3.37 starts per scored station-hour** across the held-out targets—not 3.37% error.
+- **RMSE (root mean squared error)** squares errors before averaging and taking the square root, penalizing large misses more heavily than MAE. XGBoost had the lowest test RMSE (**5.2630**). RMSE ranks **LSTM slightly ahead of TFT**, even though TFT has lower MAE.
+- **WAPE (weighted absolute percentage error)** is `sum(abs(actual - predicted)) / sum(actual) × 100`. It describes absolute error relative to total recorded starts across the evaluated targets. XGBoost's **37.123% WAPE** is not classification accuracy.
+- **Seasonal baselines** set a meaningful hurdle: XGBoost reduced test MAE by approximately **26.9% versus lag-24** and **29.4% versus lag-168**.
+- **TFT uncertainty:** Its `q10–q90` prediction interval achieved **79.495% empirical coverage** on the test targets, close to the nominal **80%** interval. This does not imply every individual station's intervals were calibrated equally well.
+
+| TFT uncertainty in original count units | Validation | Test |
+|---|---:|---:|
+| Clipped q10–q90 empirical coverage (nominal 80%) | 79.886% | 79.495% |
+| Clipped mean quantile pinball loss | 1.526593 | 1.208103 |
+
+Test q10/q50/q90 pinball losses were 0.718650 / 1.884786 / 1.020873.
+Raw/clipped comparisons remain in the [original held-out report](docs/final_held_out_benchmark.md).
+XGBoost's clipped MAE was **13.43% lower on validation** and **10.70% lower on test**
+than TFT, calculated from saved full-precision metrics.
+
+**Why did XGBoost win this benchmark?** The evidence establishes that engineered, calendar-aware tabular features plus boosted trees worked best *on this particular dataset and split*. It does not establish that XGBoost is universally superior to deep sequence models. Different model capacity, optimization, station activity patterns or dataset shifts could change the ranking.
+
+**Forecast-issuance assumption:** This is a retrospective rolling-origin study.
+Eventual accepted counts are assumed available at bucket end; actual publication
+latency was not replayed. A preceding test observation can enter a later origin's
+history only after its bucket ends. No future target, retrospective quality
+diagnostic or future weather observation enters predictors.
+
+**Evaluation integrity:** The six-model follow-up is **not fully blind**. Test outcomes for some earlier methods were already known when MLP/LSTM follow-up work was developed. Those later models were tuned on validation and frozen before their own test scoring, but the extended comparison should be described transparently. Lower absolute test MAE than validation MAE does not automatically imply less relative error; test WAPE and activity patterns need their own interpretation.
+
+### Saved-prediction diagnostic view
+
+![Station-level test MAE distribution across the six methods](docs/assets/forecasting-v1/station-mae.svg)
+
+This figure summarizes **saved test predictions**, not a fresh evaluation or
+training run. See [bias, station and temporal diagnostics](docs/forecasting_v1_diagnostics.md).
+
+### Model serving and verification
+
+- FastAPI supports timestamped **24-step station-level forecasts** with a model-selection interface; XGBoost is the default and TFT includes quantiles.
+- Native and container HTTP checks exercised **all six methods** with frozen model artifacts. MLflow tracks experiments.
+- The service is **containerized and verified**, not publicly production-hosted.
+
+### MLOps and software engineering
+
+- **Data and recovery:** historical CPU processing used the existing GCP Compute
+  Engine VM and private GCS bucket. Source hashes, immutable manifests,
+  generation-pinned object receipts, checksum readbacks and restore tests make
+  runs recoverable. Reconciliation is bounded at **512 MB DuckDB memory**; its
+  process/host guards and four-hour server-side shutdown are documented separately.
+- **Experiment tracking:** separate MLflow training/validation and final-test
+  records preserve frozen configurations, checkpoint identities and dataset
+  provenance. Idempotent metric imports avoid duplicate runs/steps; checkpoints
+  remain outside Git. The earlier citywide experiments remain distinct studies.
+- **Serving:** trusted-artifact adapters verify hashes before deserialization,
+  reject future/duplicate/missing input hours, and never fit during requests.
+  TensorFlow runs in a separate worker; worker outage/recovery is verified.
+- **Packaging and CI:** CPU Docker images use non-root users, health checks and
+  read-only artifact mounts. Standard GitHub runners verify contracts and
+  containers; **no automatic cloud deployment/CD pipeline is claimed**.
+
+**Technical details:** [Forecasting serving guide](docs/forecasting_v1.md) · [Six-model follow-up benchmark](docs/six_model_followup_benchmark.md) · [Diagnostic analysis](docs/forecasting_v1_diagnostics.md) · [Cloud release verification](docs/cloud_release_verification.md).
+
+---
+
+<a id="sqlpilot"></a>
+
+## 2. SQLPilot — agentic analytics with MCP
+
+**Goal:** Answer analytical questions about an approved Citi Bike sample in natural language while keeping database execution deterministic, bounded and auditable.
+
+### How a request works
+
+1. **Streamlit UI** accepts the user's question and displays SQL, rows, an explanation and expandable agent steps.
+2. **LangGraph** manages schema lookup, generation versus clarification, guarded execution, at most **one SQL correction**, and a grounded final explanation. The graph has at most **two generation attempts** and **three tool calls** per request under its configured budget.
+3. The **official MCP client** invokes our **custom Python MCP stdio server**, which exposes `sqlpilot_schema` and `sqlpilot_query`.
+4. **Groq `openai/gpt-oss-20b`** receives the approved schema/question and generates structured SQL decisions. The model is remotely hosted; no large LLM weights run on the user's laptop.
+5. The SQL tool uses DuckDB AST checks, table/column/function allowlists, isolated **read-only execution**, disabled external access, a **64 MB engine memory limit**, a **5-second query timeout** and a **100-row response limit**. Query result rows remain local. The provider receives the approved question,
+schema **including sample row counts**, and previous SQL/generic feedback on the
+one correction attempt—not raw trip files, reference answers or GCP credentials.
+Provider retention exceptions and account-specific zero-retention controls are
+covered in the [privacy guide](docs/sqlpilot_groq_setup.md).
+
+**Example permitted SQL** (illustrative, not a retained exact live-model response):
+
+```sql
+SELECT COUNT(*) AS accepted_trips FROM validated_trips;
+```
+
+The approved local sample contains **1,998 accepted trips** and **1,931 station-hour
+rows**. These are sample counts, not full-history totals. The original live
+report retained statuses and correctness but not generated SQL or rows, so the
+exact SQL from its successful cases cannot be reconstructed.
+
+### Real LLM evaluation (initial frozen baseline)
+
+The initial test used **nine actual Groq model questions** (six answerable, two clarification-type, one malicious-instruction test). These are **real model outcomes**, not scripted/mocked SQL responses.
+
+| Metric | Result |
+|---|---:|
+| Evaluated cases | **9/9** |
+| Overall correct outcomes | **6/9 (66.7%)** |
+| Answerable questions with correct results | **4/6 (66.7%)** |
+| Answerable questions whose SQL executed | **5/6 (83.3%)** |
+| Correct clarification/safety statuses | **2/3** |
+| Malicious instruction declined | **1/1** |
+| Median end-to-end processing latency per case | **1.946 s** |
+| Maximum processing latency per case | **2.881 s** |
+
+**What failed and why it matters:** The top-station question executed but returned an incorrect result (**semantic correctness differs from SQL validity**); the weekday question failed both permitted attempts; and the ambiguous question was answered instead of prompting for clarification. The original detailed SQL/error traces were not retained, so their exact root causes **cannot be claimed**. Sanitized diagnostic capture was added for future runs. The 6/9 score is **not** an improved post-fix score.
+
+The evaluation deliberately paused **65 seconds between questions** to respect rate limits; the full batch elapsed **522.0 seconds**. The ~1.95-second median refers to *case processing*, not the pacing delay.
+
+### Why MCP and LangGraph?
+
+- **LangGraph** defines the controlled agent state and transitions (including clarification and bounded correction); it is not the LLM.
+- **MCP** standardizes discovery and invocation of our two database tools. Our server is *part of this repository*, not an external database provider.
+- **Groq's hosted model** generates the proposed SQL; it does not independently bypass the tool server or access the database.
+- **DuckDB and guardrails** determine what SQL is permitted and return the authoritative result.
+
+The application and MCP stack were verified natively and **inside Docker**, including Streamlit HTTP/WebSocket interaction and rejection of unsafe SQL. The latest reported SQLPilot CI passed **65 tests**.
+
+**Technical details:** [Docker release and live-evidence limits](docs/sqlpilot_release.md) · [SQLPilot core](docs/sqlpilot_core.md) · [Application and startup](docs/sqlpilot_application.md) · [Groq setup, approval and data handling](docs/sqlpilot_groq_setup.md).
+
+---
+
+<a id="experimentlab"></a>
+
+## 3. ExperimentLab — statistical experimentation
+
+**Question:** Would a hypothetical bike redistribution policy increase accepted bike starts at treated stations?
+
+ExperimentLab creates an explicitly **fully synthetic** 100-station experiment with balanced station-level randomization (50 treatment, 50 control) and fixed-seed reproducibility. It illustrates experimental design and inference, **not a real Citi Bike intervention or measured real-world treatment effect**.
+
+### Statistical design
+
+- **Randomization unit:** Station; repeated station-hour data are not treated as independent randomized assignments.
+- **Estimand:** Mean treatment-minus-control difference in **starts per station per day**.
+- **Unadjusted analysis:** Station-level treatment/control comparison with Welch inference, confidence intervals and p-value.
+- **CUPED:** Freeze theta from **two earlier pre-treatment periods**, then adjust the third-period baseline against fourth-period outcomes. Neither treatment outcomes nor assignment are used to fit theta.
+- **Planning:** Two-sided noncentral-t power/MDE using pre-treatment calibration SDs and equal-arm/equal-variance assumptions; inference itself uses unequal-variance Welch.
+- **Fixed design:** Simulation seed 2026, assignment seed 42, 28 days/period, injected +3 starts/station/day, two-sided α=0.05. CUPED is primary; raw analysis is sensitivity. No optional stopping or subgroup search.
+
+### Verified simulation results
+
+| Estimator | Estimated effect (starts/station/day) | 95% confidence interval | p-value |
+|---|---:|---:|---:|
+| Unadjusted | **+2.8086** | **[-10.0947, 15.7118]** | **0.6667** |
+| CUPED-adjusted | **+2.7531** | **[1.7190, 3.7871]** | **8.03 × 10⁻⁷** |
+
+**Interpretation:** The unadjusted interval crosses zero widely, so the unadjusted result is not statistically significant at the 5% level. The CUPED interval is much narrower and excludes zero, yielding a statistically significant **positive effect in this synthetic simulation**. Its 95% interval still includes effects **below +2**, so it **does not establish the prespecified practical threshold of +2 starts/station/day**.
+
+- **Estimated effect-variance reduction with CUPED:** **99.358%**, *conditional on this synthetic data-generating process*. This unusually large gain must **not** be generalized as typical real-world CUPED performance.
+- **Planning power:** **98.56%** to detect an effect of **+2 versus zero** under the stated planning assumptions.
+- **Minimum detectable effect:** **1.3516 starts/station/day** under the same design assumptions.
+
+| Planning for +2 against zero, 50 stations/arm | Raw | CUPED |
+|---|---:|---:|
+| Power | 6.03% | 98.56% |
+| 80%-power MDE | 18.7193 | 1.3516 |
+| Stations/arm required for 80% power | 4,296 | 24 |
+
+Across **200 null simulations**, CUPED rejected 5.5% and its 95% interval covered
+the true effect 94.5% of the time. Across 200 +3-effect simulations, rejection was
+100% and coverage 94.5%; the exact Monte Carlo interval for detection was
+98.17%–100%, not proof of perfect power. Station activity is deliberately stable
+in this generator, explaining the unusually strong variance reduction. Real
+redistribution can create network spillovers and rider substitution; interference,
+seasonality, missingness, heterogeneous effects, costs and service/safety outcomes
+require a different real-world design. No real intervention was performed.
+
+**What is CUPED?** It uses a baseline covariate measured before treatment assignment/outcomes to explain some predictable variation in the outcome. If that baseline strongly predicts follow-up activity, the adjusted effect can have a much smaller variance. CUPED improves *precision* under its assumptions; it does not turn a synthetic experiment into real causal evidence or guarantee a meaningful operational effect.
+
+**Read the generated report:** [ExperimentLab HTML report](docs/experimentlab_report.html) · [Design, caveats and reproduction instructions](docs/experimentlab.md).
+
+---
+
+<a id="verification"></a>
+
+## Verification & CI
+
+GitHub Actions runs configured tests automatically on hosted runners after repository changes. A green job means the **specified checks passed**; it is not proof that every future question/model response will be correct. No public deployment pipeline is implied by the CI checks alone.
+
+| Component | Verified v1 release checks | Evidence |
+|---|---|---|
+| Forecasting | **88 gateway + 17 worker tests**, plus repository checks | [Forecasting CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40974070453) |
+| SQLPilot | **65 tests passed**; Docker, HTTP/WebSocket and MCP verification | [SQLPilot CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40974069796) |
+| ExperimentLab | **19 tests passed**; report generation and checksums verified | [ExperimentLab CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40974069852) |
+
+These tests cover code contracts, SQL policies, MCP communication, application behavior, container runtime and experiment calculations. **SQLPilot's nine-case live model evaluation is a different measurement** from its 65 mostly deterministic/mock-assisted engineering tests.
+
+Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjeevani1193/CityPulse-AI/commit/f8e497e)** (`main`).
+
+<a id="reproduce"></a>
+
+## Reproducing the project
+
+```bash
+git clone https://github.com/sanjeevani1193/CityPulse-AI.git
+cd CityPulse-AI
+```
+
+> **Data/artifact availability:** Large historical files, model weights, private GCS objects and local sample outputs are intentionally not embedded in Git. A fresh clone may require the documented artifact/data setup before executing services or evaluations. Avoid assuming `git clone` alone reconstructs the full 90M-ride benchmark.
+
+**Forecasting — frozen artifacts required.** Use the existing CPU gateway and
+separate TensorFlow environments described in [the serving guide](docs/forecasting_v1.md).
+Authorized GCS access is required to provision private artifacts; do not create
+cloud credentials or start compute merely to view the documentation.
+
+```bash
+# Only with existing authorized GCS access; downloads the pinned small serving
+# bundle and a validation demo, not the full historical dataset.
+PYTHONPATH=src .venv/bin/python scripts/provision_forecasting_v1.py --demo
+
+export PYTHONPATH=src
+export CITYPULSE_STATION_ARTIFACT_DIR="$PWD/outputs/forecasting-v1/artifacts"
+# Existing macOS gateway environment only; Linux containers use libgomp instead:
+export DYLD_LIBRARY_PATH="$PWD/.venv/lib/python3.14/site-packages/sklearn/.dylibs"
+.venv/bin/python -m uvicorn citypulse_ai.api.station_app:app \
+  --host 127.0.0.1 --port 8000 --workers 1
+```
+
+In another terminal, after provisioning and with the gateway running:
+
+```bash
+curl --fail http://127.0.0.1:8000/health
+curl --fail http://127.0.0.1:8000/models
+curl --fail http://127.0.0.1:8000/stations
+curl --fail -H 'Content-Type: application/json' \
+  --data-binary @outputs/forecasting-v1/demo-request.json \
+  http://127.0.0.1:8000/predict
+```
+
+The default is XGBoost. The [guide](docs/forecasting_v1.md) documents all model
+identifiers and the optional localhost TensorFlow worker. Stop native services
+with Ctrl-C. `compose.station.yaml --profile lstm` provides the existing
+container demonstration; build sequentially and stop with
+`docker compose -f compose.station.yaml --profile lstm stop`.
+Never launch heavy frameworks under elevated host memory pressure.
+
+**SQLPilot:** Follow [the application setup](docs/sqlpilot_application.md) to create the required isolated environments and ensure the approved sample DuckDB file is available. For an already configured local development environment, the tested Streamlit entrypoint is:
+
+```bash
+export PYTHONPATH=src
+export SQLPILOT_MCP_PYTHON="$PWD/.venv/bin/python"
+.venv-sqlpilot/bin/python -m streamlit run src/citypulse_ai/sqlpilot/ui.py
+```
+
+Using a **live** Groq model requires a personal Free/approved provider account, a runtime-only `GROQ_API_KEY`, and the specific operator/data-sharing approval flags and schema fingerprint documented in [Groq setup](docs/sqlpilot_groq_setup.md). Never add secrets to the repository or paste them into a screenshot. The app can be inspected without claiming live model availability if no approved backend is configured. Docker verification is described in the [standalone Docker guide](docs/sqlpilot_release.md) and CI workflow; a public server is not required.
+
+**ExperimentLab — no historical data, APIs or containers required.** The pinned
+statistics environment is Python 3.14 with NumPy 2.5.3 and SciPy 1.18.1. For a
+fresh, separate environment:
+
+```bash
+python3.14 -m venv "$HOME/.virtualenvs/citypulse-experimentlab"
+source "$HOME/.virtualenvs/citypulse-experimentlab/bin/activate"
+python -m pip install -r ci/experimentlab-requirements.txt
 PYTHONPATH=src OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
-  .venv/bin/python -m citypulse_ai.experiments.redistribution \
+  python -m citypulse_ai.experiments.redistribution \
   --output outputs/experimentlab/my-new-run
+PYTHONPATH=src python -m pytest tests/test_experimentlab.py -q
+deactivate
 ```
 
-Use the existing statistics environment, or the pinned
-`ci/experimentlab-requirements.txt` in a separate Python 3.14 environment.
-Open the generated `report.html`; no datasets, APIs, Docker or cloud services
-are needed. See the component guides above for their independent installation
-and demo requirements. Credentials, historical data and model weights remain
-outside Git. CI: [Inference](https://github.com/sanjeevani1193/CityPulse-AI/actions/workflows/ci.yml),
-[SQLPilot](https://github.com/sanjeevani1193/CityPulse-AI/actions/workflows/sqlpilot-ci.yml),
-[ExperimentLab](https://github.com/sanjeevani1193/CityPulse-AI/actions/workflows/experimentlab-ci.yml).
+Open `outputs/experimentlab/my-new-run/report.html` in a browser. The output
+directory must be new; JSON, HTML and SHA-256 checksums are create-only. The
+[committed synthetic HTML example](docs/experimentlab_report.html) is 18 kB;
+GitHub shows its source, so download/open it locally for the rendered report.
+See [design and reproduction details](docs/experimentlab.md).
 
+<a id="limitations"></a>
 
-## Forecasting v1: verified station100 inference
+## Engineering choices & limitations
 
-The new FastAPI gateway supports XGBoost (default), MLP, TFT, lag-24 and lag-168,
-with LSTM routed to an isolated TensorFlow worker. It reuses frozen preprocessing
-and original feature construction; seven pinned serving artifacts total only
-**4 MB**. The 336-hour request and 24-hour response preserve UTC elapsed ordering,
-NYC midnight issuance, missingness and explicit availability assumptions.
+- **Historical not streaming:** The ETL processes historical Citi Bike trip data. SQLPilot offers interactive queries and the forecast API supports on-demand inference; neither implies a live continuously updated streaming pipeline.
+- **Recorded activity not latent demand:** Bike starts are an operational proxy, not an estimate of rides lost to empty/full docks or other unobserved demand.
+- **Model comparison:** The six-method follow-up has a documented non-blind comparison limitation. Splits, common target keys and validation-only follow-up tuning are disclosed.
+- **LLM reliability:** One successful demo query does not establish general accuracy; the initial nine-case live baseline was 6/9, with three documented failures and no proven improved retest.
+- **Privacy and safety:** The MCP server restricts queries; hosted LLM use transmits the approved question/schema context externally. Rate limits and Zero Data Retention settings are account/provider dependent.
+- **Synthetic causal evidence:** ExperimentLab is an educational/reproducible simulation, not evidence that Citi Bike implemented or benefited from a redistribution policy.
+- **Deployment:** Container and CI verification have been completed, but no public production hosting, availability SLO or automated CD deployment is claimed.
 
-All six methods returned 24 forecasts through real native and container HTTP.
-LSTM and MLP matched saved validation probes within `rtol=1e-5, atol=1e-4`;
-XGBoost and seasonal baselines matched exactly. TFT matched its original frozen
-forward path exactly, including ordered quantiles. **174 selected regression tests
-passed**, and worker failure isolation/recovery passed. Existing citywide services
-and Compose configuration are preserved. This is a verified reproducible demo,
-not a hosted production deployment or proof that all frameworks fit an 8 GB Mac.
+<a id="documentation"></a>
 
-- [Provision artifacts, run the validation demo, and understand readiness](docs/forecasting_v1.md)
-- [Saved-prediction bias, station and temporal diagnostics](docs/forecasting_v1_diagnostics.md)
-- Optional station Compose: `compose.station.yaml`; native and Docker verification
-  runs on a standard hosted runner with [restricted keyless GCS access](docs/cloud_release_verification.md).
-- [Native/six-method evidence](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40707527557)
-  and [successful targeted Docker recovery](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40709209185).
-  The first run's restart-command failure was fixed and verified separately;
-  the benchmark was not rerun.
+## Documentation map
 
-## SQLPilot standalone application milestone
+| Area | Detailed evidence and instructions |
+|---|---|
+| Final data and labels | [Final station dataset](docs/final_tft_dataset.md) · [Versioned labels](docs/station_training_labels.md) · [Historical ETL](docs/historical_ingestion.md) |
+| Model development | [TFT training](docs/tft_training.md) · [XGBoost](docs/station_xgboost_benchmark.md) · [MLP](docs/station_mlp_forecasting.md) · [LSTM](docs/station_lstm_forecasting.md) |
+| Evaluation | [Original four-method test](docs/final_held_out_benchmark.md) · [Six-method follow-up](docs/six_model_followup_benchmark.md) · [Saved-prediction diagnostics](docs/forecasting_v1_diagnostics.md) |
+| Serving and MLOps | [Forecasting v1](docs/forecasting_v1.md) · [Secure hosted verification](docs/cloud_release_verification.md) · [MLflow](docs/local_mlflow_tracking.md) · [Inference CI](docs/github_actions_ci.md) |
+| SQLPilot | [Release and Docker](docs/sqlpilot_release.md) · [Agent application](docs/sqlpilot_application.md) · [SQL core](docs/sqlpilot_core.md) · [Groq approval/privacy](docs/sqlpilot_groq_setup.md) |
+| ExperimentLab | [Design, statistics and reproduction](docs/experimentlab.md) · [HTML report](docs/experimentlab_report.html) |
+| Earlier engineering milestones | [Archived comprehensive development guide](docs/development_history.md)—preserves the prior long README, exploratory citywide work and detailed ETL commands |
 
-SQLPilot now has a **Streamlit UI → LangGraph agent → official MCP client →
-existing read-only DuckDB server**. The bounded graph discovers schema, generates
-SQL or asks for clarification, executes through MCP, permits one correction, and
-returns actual rows with a grounded explanation and sanitized trace.
+Earlier milestone reports preserve their original phase-specific status; the
+serving and release guides linked above supersede historical “pending” notes.
+The main code lives in `src/citypulse_ai/`, tests in `tests/`, workflows in
+`.github/workflows/`, and private generated outputs stay outside Git.
 
-The first genuine **Groq GPT-OSS 20B** nine-case development evaluation achieved
-**6/9 correct outcomes**: 4/6 answerable results correct, 5/6 executed, 2/3 expected
-clarification/safety statuses correct, and 1/1 malicious instruction declined.
-Median latency was **1.946 seconds**. This small sample is not a general accuracy
-or security guarantee. No local LLM is loaded and no Codex session is required.
+## Technology stack
 
-- [Live baseline, evidence limits and standalone Docker instructions](docs/sqlpilot_release.md)
-- [Application setup, provider gates and architecture](docs/sqlpilot_application.md)
-- [Groq free-tier checks, secure key setup and privacy scope](docs/sqlpilot_groq_setup.md)
-- [Core schema and SQL safety policy](docs/sqlpilot_core.md)
+**Data & ML:** Python · SQL · DuckDB · Parquet · GCP Cloud Storage · XGBoost · PyTorch · TensorFlow · Temporal Fusion Transformer · MLflow
 
-Standalone Docker build, HTTP/WebSocket interaction and MCP execution
-[passed on GitHub-hosted Ubuntu](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40949596948):
-65 tests passed in the offline image, using synthetic fixtures and controlled
-generation without provider credentials. Image size is about 769 MiB; sampled
-runtime RAM was 92.96 MiB (not a measured peak). Original live
-failure details were not saved; local diagnostic capture now preserves future
-evidence. No improved live accuracy is claimed. QLoRA and ExperimentLab remain
-future work.
+**Agents & applications:** LangGraph · Model Context Protocol (MCP) · Groq GPT OSS 20B · Streamlit · FastAPI
 
-## Final 100-station validation benchmarks
+**Experimentation:** Randomized A/B testing · Welch inference · CUPED · Statistical power · MDE · Confidence intervals
 
-Stations and preprocessing were selected/fitted using January 2024–June 2025
-training data only. The frozen dataset contains 53,300 training windows, 9,200
-validation windows (July–September 2025), and 9,200 held-out test windows
-(October–December 2025). Forecasts issue at America/New_York midnight with
-336 historical and 24 future **elapsed hours**, preserving DST behavior.
-Labels follow `accepted_recorded_starts_v1`, including certified source-scoped
-zeros; they measure accepted recorded starts, not unmet physical demand.
+**Software engineering:** Docker · Docker Compose · GitHub Actions CI · Regression testing · Safe SQL validation
 
-All methods use **the same 220,800 eligible validation targets**, with
-matching station/origin/target/lead keys and historical lag baselines.
+---
 
-| Model | Clipped validation MAE | Clipped RMSE | Clipped WAPE |
-| --- | ---: | ---: | ---: |
-| XGBoost, depth 6, 300 rounds | **4.1028** | 6.4225 | 30.008% |
-| MLP, selected `epoch-010.pt` | 4.1213 | 6.4504 | 30.143% |
-| LSTM, selected `epoch-018.keras` | 4.5272 | 7.0553 | 33.112% |
-| TFT, selected `epoch-006.pt` | **4.7391** | 7.4922 | 34.662% |
-| Lag-24 baseline | 6.0211 | 9.5619 | 44.038% |
-| Lag-168 baseline | 5.2934 | 8.3116 | 38.716% |
+**Project:** CityPulse AI — Time-Series Forecasting, Agentic AI & MLOps
 
-Clipping is `max(0, prediction)` in original ride-count units. XGBoost's MAE is
-**13.43% lower** than TFT's, computed from the unrounded scores. These are
-validation comparisons with different model representations and selection
-budgets; they are not held-out test results. TFT's six-epoch budget is complete,
-without a convergence claim. XGBoost was selected from three predefined candidates.
-
-The learned-model runs are tracked separately in MLflow; checkpoints/models, reports and
-recovery bundles were checksum- and generation-verified in GCS, including restore
-checks. Large artifacts remain outside Git. See [TFT training and recovery](docs/tft_training.md),
-[XGBoost benchmark and reproduction](docs/station_xgboost_benchmark.md), and
-[final dataset preparation](docs/final_tft_dataset.md).
-
-The subsequently authorized **October–December 2025 held-out benchmark is complete**:
-
-| Forecast | Test MAE | Test RMSE | Test WAPE |
-| --- | ---: | ---: | ---: |
-| XGBoost clipped | 3.3663 | 5.2630 | 37.123% |
-| MLP epoch 10 clipped | 3.4015 | 5.3244 | 37.511% |
-| TFT epoch 6 clipped | 3.7696 | 5.9449 | 41.570% |
-| LSTM epoch 18 clipped | 3.8010 | 5.8195 | 41.917% |
-| Lag-24 | 4.6071 | 7.4208 | 50.806% |
-| Lag-168 | 4.7665 | 7.7200 | 52.563% |
-
-All six use the same **220,800 test targets**; 100 station-hours after the 24-hour forecast on November's
-25-hour day are explicitly unscored by the 24-elapsed-hour midnight contract.
-Absolute errors are lower than on validation, but WAPE rises for every method.
-TFT clipped q10–q90 coverage is **79.495%** (nominal 80%). Results, provenance,
-MLflow and verified GCS recovery are documented in the
-[final held-out benchmark](docs/final_held_out_benchmark.md). The [six-method follow-up report](docs/six_model_followup_benchmark.md) adds raw/clipped MLP/LSTM scores, validation-versus-test gaps, frozen identities and verified recovery.
-
-**Disclosure:** MLP and LSTM were developed after the initial four-method test results were known. Their configurations/checkpoints were frozen before this one-time follow-up test pass. This extension is **not a fully blind six-model experiment**; the four saved original results were reused without rerunning those methods.
-
-**Pending:** final-model FastAPI/Docker integration and an operational publication-
-latency policy. No final station-level model has been deployed by this milestone.
-Earlier phase descriptions below document the project's development history.
-
-## Architecture overview
-
-The planned data flow is:
-
-```text
-Citi Bike trips + historical weather
-                |
-       ETL and validation
-                |
-        DuckDB warehouse
-                |
-      Time-aware features
-                |
- Forecasting -> evaluation -> MLflow tracking
-                |
-     FastAPI + Streamlit dashboards
-
-SQLPilot -------> governed warehouse queries
-ExperimentLab --> statistical analysis and A/B testing
-```
-
-DuckDB provides the SQL warehouse. Seasonal baselines, PyTorch, TensorFlow and
-XGBoost forecasting implementations are available. SQLPilot uses hosted SQL generation with MCP and LangGraph; fine-tuning and
-vLLM remain optional roadmap work. Docker Compose
-and inference CI are implemented; Kubernetes and production cloud hosting remain
-later deployment phases. The original
-full scope remains unchanged: ARIMA, XGBoost, PyTorch, TensorFlow, LSTM, TFT,
-MLflow and model monitoring, QLoRA fine-tuning on H100, LangGraph/MCP/vLLM,
-FastAPI, Docker, Kubernetes, GitHub Actions, AWS and Google Cloud integration,
-and statistical analysis, A/B testing, and reporting. We implement these
-incrementally with measured experiments; this is not a reduced MVP.
-
-## Project structure
-
-```text
-.
-├── AGENTS.md                 # Guidance for future coding agents
-├── LICENSE                   # Existing project license
-├── README.md                 # Objective, setup, architecture, and roadmap
-├── pyproject.toml            # Packaging, dependencies, and pytest configuration
-├── notebooks/
-│   ├── 01_data_exploration.ipynb # Existing EDA, preserved
-│   └── 02_forecasting_data_preparation.ipynb # Phase 2.1 walkthrough and plots
-├── csv_files/                # Local raw CSVs; ignored by Git
-├── src/
-│   └── citypulse_ai/
-│       ├── __init__.py       # Root Python package
-│       ├── etl/              # schema.py, trips.py, pipeline.py, cli.py
-│       ├── features/         # Time-aware feature preparation
-│       ├── forecasting/      # Baselines and future forecasting models
-│       ├── evaluation/       # Backtesting and forecast metrics
-│       ├── experiments/      # ExperimentLab statistical analysis
-│       └── sqlpilot/         # Streamlit/LangGraph/MCP; hosted LLM baseline
-└── tests/
-    ├── fixtures/             # Synthetic valid, invalid, empty, and DST CSVs
-    ├── test_etl.py            # Validation, aggregation, persistence, and CLI tests
-    └── test_imports.py        # Package discovery and import smoke tests
-```
-
-The ETL package contains the implemented trip pipeline, and
-`features/reporting.py` prepares the reviewed February reporting dataset.
-`features/preparation.py` creates forecasting grids and coverage audits, with a
-module CLI in `features/cli.py`. Forecasting and evaluation contain implemented models and metrics;
-SQLPilot has a standalone agent application and measured live baseline. ExperimentLab now implements the synthetic station experiment documented above. The `src/` layout separates
-importable code from repository files.
-
-## Local setup and tests
-
-Use Python 3.11 or newer. From the repository root on macOS or Linux:
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e '.[dev]'
-python -m pytest
-```
-
-On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
-
-The initial runtime dependencies are pandas for tabular transformations, PyArrow
-for Parquet storage, and DuckDB for SQL analytics. `pytz` supports DuckDB's Python
-retrieval of timezone-aware SQL timestamps. The `dev` extra installs pytest.
-ML, serving, and orchestration dependencies will be added when their phases begin.
-
-Pytest discovers tests under `tests/` and includes `src/` on its import path. If
-pytest is unavailable, the scaffold smoke tests can also run without installing
-third-party dependencies on macOS or Linux:
-
-```bash
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-```
-
-The unittest fallback runs only the scaffold smoke tests. Use pytest for the ETL
-tests, including synthetic DST cases, duplicate handling, Parquet/DuckDB outputs,
-and CLI behavior.
-
-## Trip ETL (Phases 1.1 and 1.3)
-
-### Raw data contract and rejection policy
-
-The CSV must have a header containing these columns. Extra columns are ignored.
-Identifiers are read as strings to retain leading zeros; whitespace is stripped.
-Literal strings such as `NA` remain identifiers rather than inferred nulls.
-
-| Column | Contract |
-| --- | --- |
-| `ride_id` | Required, nonblank trip identifier; unique across selected files |
-| `started_at` | Required ISO-8601 timestamp with seconds |
-| `ended_at` | Required ISO-8601 timestamp with seconds; later than the start |
-| `start_station_id` | Required, nonblank string with valid ID syntax |
-| `end_station_id` | Column required; blank values accepted for ride-start demand |
-
-The real February 2025 CSVs have 13 columns, including ride type, station names,
-coordinates, and membership type. The ETL reads only these five columns; it does
-not coerce decimal-looking IDs such as `3620.02` into floating-point numbers.
-Start IDs must contain alphanumeric segments optionally separated by `.`, `_`,
-or `-`. Whitespace is stripped. Blank IDs are missing; case-insensitive `NA`,
-`NaN`, `NULL`, `None`, `N/A`, and `<NA>` markers are invalid. This checks syntax,
-not membership in an authoritative station catalog. No four-digit numeric
-restriction is imposed, preserving leading zeros and alphanumeric IDs.
-
-The reviewed exception allowlist contains exactly **`6569.09_`**. February source
-data shows this ID as W 35 St & 9 Ave, approximately 33 metres from the location
-recorded for `6569.09`. This supports retaining its 43 otherwise-valid starts,
-but does not prove the IDs are identical. Preserve `6569.09_` as a distinct raw
-identifier; do not strip underscores or merge it with `6569.09`. Other malformed
-IDs remain rejected, and the exception does not bypass timestamp, duration,
-missing-value, or duplicate checks. Matching follows the existing whitespace
-cleanup, and the allowlist is recorded in each run's validation report.
-
-An end station is not needed to count where a trip started, so missing end IDs
-are accepted and counted in the report. A valid `ended_at` remains required to
-check elapsed duration. Positive rides over 24 hours are retained for now; an
-upper cutoff must be a documented domain decision, not inferred from EDA alone.
-
-Missing columns, a headerless file, or malformed CSV syntax fail the run. A
-header-only CSV succeeds and creates typed empty outputs. Rows with missing
-values, invalid timestamps, or nonpositive/unrepresentable durations are rejected.
-All occurrences of duplicate ride IDs are rejected, even when their other fields
-match or one occurrence has another error. Duplicate checking follows whitespace
-normalization and covers all selected rows across files and chunk boundaries.
-Reasons accumulate per record. Repeating the same input path is an error.
-No maximum plausible duration is imposed yet; that needs a domain decision.
-
-Rejected rows retain the original five values, the absolute `source_file` path,
-and a per-file `source_row` record number
-(header is 1, first data record is 2), and semicolon-separated rejection reasons.
-Record numbers are logical CSV records, not physical lines for multiline fields.
-A completed run may contain rejected rows, including all rows, and exits zero;
-inspect `report.json` for counts. Configuration/read failures exit nonzero.
-
-### Timestamp and hourly-count policy
-
-- Accept `YYYY-MM-DD HH:MM:SS` or a `T` separator, optional fractional seconds
-  (up to nine digits, preserved at nanosecond precision), and optional `Z` or
-  numeric `±HH:MM` offset.
-- Interpret timestamps without an offset in **America/New_York**. The sampled
-  real CSVs contain no offsets. The official
-  [System Data page](https://citibikenyc.com/system-data) lists timestamp fields
-  but does not explicitly specify their time zone, so NYC local time remains a
-  documented assumption pending publisher confirmation. February 2025 uses
-  UTC−05:00 under this policy. Do not treat that assumption as verified metadata.
-- Reject ambiguous fall-back times and nonexistent spring-forward times without
-  guessing, shifting, or inferring their UTC offset.
-- Accept timestamps with explicit offsets as identified instants. Offsets are
-  authoritative; their agreement with NYC civil time is not separately checked.
-- Normalize accepted timestamps to UTC. Calculate durations from elapsed UTC
-  time, so a spring-forward trip need not have the wall-clock duration.
-- Count ride starts by `(start_station_id, hour_start)`, flooring in UTC. The
-  half-open interval is `[hour_start, hour_start + 1 hour)`; `ride_count` is int64.
-  UTC keeps repeated fall-back local hours distinct. Convert to NYC time for
-  display, retaining the offset. Only observed station/hour bins are emitted;
-  missing bins are not assumed to have zero demand.
-
-### Run a reproducible local example
-
-After installing the editable package (reinstall after changing entry points):
-
-```bash
-source .venv/bin/activate
-python -m pip install -e '.[dev]'
-citypulse-etl --input tests/fixtures/trips_valid.csv --output-dir /tmp/citypulse-demo
-```
-
-The module entry point also works without reinstalling:
-
-```bash
-PYTHONPATH=src python -m citypulse_ai.etl.cli \
-  --input tests/fixtures/trips_valid.csv --output-dir /tmp/citypulse-demo
-python -m pytest
-```
-
-The flow is **CSV header checks → pandas chunks → temporary DuckDB staging →
-global duplicate-ID check → chunk validation → chunk hourly counts → final SQL
-aggregation → Parquet + DuckDB + audit outputs**. Functions are separated into
-`schema.py` (contract), `trips.py` (pure ingestion/validation/aggregation steps),
-`pipeline.py` (file persistence), and `cli.py` (argument handling).
-
-Each run writes six data/report files in the selected output directory:
-
-| Output | Purpose |
-| --- | --- |
-| `hourly_rides.parquet` | Station IDs, timezone-aware UTC hour starts, ride counts |
-| `validated_trips.parquet` | Every accepted trip, UTC timestamps, raw station identifiers, duration, source provenance, and exact UTC nanosecond integers |
-| `citypulse.duckdb` | Materialized canonical `validated_trips` and `hourly_rides` tables, plus derived `february_2025_hourly_rides` view |
-| `february_2025_hourly_rides.parquet` | Observed station-hour counts inside the reviewed NYC February window |
-| `rejected_trips.csv` | Rejected source records and their validation reasons |
-| `report.json` | Per-file hashes/counts, run counts, rejection reasons, validation/timezone policies, timezone-data hash, processing limits, library versions |
-
-Rerunning replaces these named files/table rather than appending trips. Other
-DuckDB tables are preserved. Use a separate directory for each source/run you
-want to retain. Writes across the outputs are not atomic; after an I/O
-failure, rerun successfully before consuming them. Outputs are sorted by station
-and UTC hour. The report contains no run clock, allowing identical reports for
-the same input path/bytes and environment. Dependency versions are recorded,
-but the project does not yet lock dependencies; preserve the environment for
-reproduction across machines. A hash of the local timezone data is recorded.
-
-Only a bounded pandas batch is validated at once (default 50,000 records).
-Temporary disk-backed DuckDB tables hold raw ETL columns, global duplicate IDs,
-and partial counts; final hourly rows are streamed to Parquet. This avoids a
-Python set of millions of IDs and avoids retaining all accepted/rejected rows.
-The default DuckDB working-memory limit is 512 MB with disk spill enabled;
-it is not a hard limit on total Python/process memory. Allow space on the system
-temporary filesystem for staging and spill. Validation uses a readable per-row
-timestamp parser, so a full-file run will take longer than a sample.
-
-Accepted trips are streamed to canonical Parquet while validating each batch;
-they are not collected into one pandas frame. The DuckDB trip table is copied
-from that artifact and does not depend on an external Parquet path. Parquet
-preserves nanosecond UTC timestamps. DuckDB `TIMESTAMPTZ` represents microseconds,
-so `started_at_utc_ns` and `ended_at_utc_ns` retain the exact original UTC instants
-in SQL too. The real February timestamps have millisecond precision and therefore
-are also represented exactly in the DuckDB timestamp columns.
-
-### Reviewed February reporting window
-
-Canonical tables retain every accepted trip/count, including January starts.
-`features/reporting.py` creates a separate view and Parquet dataset with this
-half-open **America/New_York** ride-start window:
-
-```sql
-SELECT * FROM hourly_rides
-WHERE hour_start >= TIMESTAMPTZ '2025-02-01 00:00:00 America/New_York'
-  AND hour_start <  TIMESTAMPTZ '2025-03-01 00:00:00 America/New_York';
-```
-
-Both boundaries are specified with their zone, independently of the DuckDB
-session timezone. For this month they correspond to February 1 05:00 UTC
-inclusive and March 1 05:00 UTC exclusive. The view preserves UTC hour values.
-Since the boundaries align with full hours, filtering canonical hourly counts
-is equivalent to filtering ride starts before aggregation. No zero-filling,
-feature generation, or model training is performed.
-
-The quality review found 273 genuine January 31 raw starts, all ending February 1;
-their NYC-to-UTC-to-NYC timestamps round-trip exactly. They belong in canonical
-data but not the February ride-start reporting window. Original data and previous
-ETL outputs remain intact. Reprocess all three files together into a new directory:
-
-```bash
-source .venv/bin/activate
-PYTHONPATH=src python -m citypulse_ai.etl.cli \
-  --input csv_files/202502-citibike-tripdata_1.csv \
-          csv_files/202502-citibike-tripdata_2.csv \
-          csv_files/202502-citibike-tripdata_3.csv \
-  --chunk-size 50000 --memory-limit 512MB \
-  --output-dir outputs/phase13-february-reviewed
-```
-
-Query the canonical and derived counts separately:
-
-```sql
-SELECT COUNT(*) FROM validated_trips;
-SELECT SUM(ride_count) FROM hourly_rides;
-SELECT SUM(ride_count) FROM february_2025_hourly_rides;
-```
-
-### Reviewed full-run results
-
-The combined reviewed run processed all three raw files into
-`outputs/phase13-february-reviewed/`, with 50,000-row chunks, a 512 MB DuckDB
-staging limit, and no sample limit. It finished successfully in **345.20 seconds
-(5 minutes 45 seconds)** with an empty error log.
-
-| Verification | Actual result |
-| --- | ---: |
-| Input records | 2,031,257 |
-| Canonical accepted trips | 2,030,542 |
-| Rejected records | 715 |
-| Missing start-station IDs | 673 |
-| Other invalid start-station IDs | 42 |
-| Duplicate ride IDs | 0 |
-| Canonical station-hour rows | 598,855 |
-| Canonical sum of ride counts | 2,030,542 |
-| February station-hour rows | 598,630 |
-| February ride starts | **2,030,269** |
-| January 31 trips retained in canonical storage, excluded from the view | 273 |
-
-Input equals accepted plus rejected, and canonical hourly counts equal the
-canonical trip count. Both canonical and February hourly datasets have no
-duplicate station-hour keys and match their Parquet exports exactly. The raw
-IDs remain separate: `6569.09` has 1,354 accepted starts and `6569.09_` has 43.
-No source timestamps changed; the SQL timestamp columns match their exact UTC
-nanosecond integers for every real accepted trip. Source CSV hashes and all
-22 snapshotted previous-output/notebook files were unchanged.
-
-All **56 automated tests passed in 5.50 seconds** before reprocessing. Regression
-tests cover the exact reviewed ID, rejection of other malformed IDs, duration
-checks despite the exception, January/February/March boundaries, UTC boundary
-instants, session-timezone independence, nanosecond preservation, empty outputs,
-and count conservation. The new run's `report.json`, `verification.json`,
-`run_summary.json`, and logs retain the measured results. Historical outputs
-remain available; their older rejection counts describe the earlier policy.
-
-The February data is now ready for a separate station-coverage and missing-hour
-policy step. Do not interpret absent rows as zero demand yet. Weather integration,
-forecasting features, temporal splits, and models remain later work.
-
-### Verify a bounded real-data run first
-
-```bash
-source .venv/bin/activate
-PYTHONPATH=src python -m citypulse_ai.etl.cli \
-  --input csv_files/202502-citibike-tripdata_1.csv \
-  --max-rows-per-file 10000 --chunk-size 2000 \
-  --output-dir outputs/phase13-sample
-```
-
-This limits validation to the first 10,000 rows of that file. Hashing still reads
-the entire source file as a byte stream to record provenance. Duplicate results
-cover only selected rows; they do not prove uniqueness in the rest of the file
-or across unselected files. `report.json` records the limit explicitly.
-
-The initial Phase 1.3 sample run, before the reviewed exception, read **10,000 rows**, accepted **9,995**, and
-rejected **5** for missing start-station IDs. It accepted **26** rows with blank
-end-station IDs and produced **9,590** observed station/hour bins. No duplicate
-IDs were found within the sample. These are sample results, not monthly totals.
-
-After inspecting the sample audit and checking count conservation, run the first
-complete CSV in a separate output directory:
-
-```bash
-PYTHONPATH=src python -m citypulse_ai.etl.cli \
-  --input csv_files/202502-citibike-tripdata_1.csv \
-  --chunk-size 50000 --output-dir outputs/phase13-first-file
-```
-
-The API and CLI accept multiple paths in one run, e.g. `--input part1.csv
-part2.csv part3.csv`. Inputs are sorted by resolved path for deterministic audits.
-One combined run checks IDs across all files; three separate runs do not.
-Reruns replace outputs rather than accumulate prior runs. No missing station/hour
-bins are zero-filled.
-
-Run these commands from the project root. `PYTHONPATH=src` explicitly imports
-the current working-tree package; it also works if the local editable
-installation is not being discovered by Python. The existing `.venv` has all
-required dependencies, but its editable package path was not discovered during
-this verification, so the real-data commands above use this explicit source path.
-
-### Query the warehouse
-
-```bash
-python - <<'PY'
-import duckdb
-with duckdb.connect('/tmp/citypulse-demo/citypulse.duckdb', read_only=True) as db:
-    db.execute("SET TimeZone = 'UTC'")
-    rows = db.execute('''
-        SELECT start_station_id, SUM(ride_count) AS ride_starts
-        FROM hourly_rides
-        GROUP BY start_station_id
-        ORDER BY start_station_id
-    ''').fetchall()
-    for station, count in rows:
-        print(station, count)
-PY
-```
-
-For the supplied valid fixture, the result is:
-
-```text
-001 3
-002 1
-```
-
-### Before using real Citi Bike data
-
-Verify the chosen files' schema, timestamp precision/time zone, and missing-value
-conventions against this contract. Decide how to handle stationless rides and
-whether end-station IDs must remain mandatory; define plausible duration bounds
-and acceptable rejection thresholds. Choose the source period and provenance
-records, confirm usage terms, and review the rejection audit on a sample. For
-multiple monthly files, verify global duplicates and output row-count accounting,
-measure memory/disk usage on the first file, and plan incremental ingestion.
-Define station coverage and zero-fill policies before
-turning these observed counts into a forecasting dataset. Resolve ambiguous local
-timestamps only with authoritative source information.
-
-## Dataset source and local files
-
-Use the official [Citi Bike System Data](https://citibikenyc.com/system-data)
-page and its [trip-history download archive](https://s3.amazonaws.com/tripdata/index.html).
-Review the data-use policy linked on that page before using the data. Larger
-monthly archives contain multiple CSV parts; keep all parts for that month.
-
-1. Open the official download archive and select the NYC February 2025 trip-data
-   ZIP archive (the `202502` period, rather than a Jersey City `JC-` archive).
-2. Download and extract the archive locally.
-3. Create `csv_files/` in the project root and place the extracted CSV parts there.
-   The current analysis uses these three files:
-
-   ```text
-   csv_files/202502-citibike-tripdata_1.csv
-   csv_files/202502-citibike-tripdata_2.csv
-   csv_files/202502-citibike-tripdata_3.csv
-   ```
-
-These raw CSVs are excluded from Git and must be downloaded separately after
-cloning. `data/raw/`, generated Parquet/DuckDB files, virtual environments, caches,
-and local secrets are also ignored. The small synthetic CSVs under
-`tests/fixtures/` are committed so tests do not require real data.
-
-## Jupyter EDA setup and saved progress
-
-From the project root, use the same virtual environment as the ETL:
-
-```bash
-source .venv/bin/activate
-python -m pip install -e '.[dev,notebooks]'
-python -m ipykernel install --sys-prefix --name citypulse-ai \
-  --display-name 'CityPulse AI (.venv)'
-python -m jupyterlab notebooks/01_data_exploration.ipynb
-```
-
-Select **CityPulse AI (.venv)**. The notebook locates `csv_files/` from either the
-project root or `notebooks/`. Its first read uses `nrows=5`; later saved EDA cells
-scan all three files with pandas chunks or DuckDB and retain their tables and
-plot. Opening the notebook displays saved results without rerunning the analysis.
-Rerun cells deliberately with your mentor.
-
-The saved results report **2,031,257 rides** across the three parts, no extra
-duplicate ride IDs, and **315 rides over 24 hours** under the notebook's current
-duration query. These are recorded EDA outputs, not forecasting benchmarks, and
-were not recomputed during the repository cleanup. The notebook's exploratory
-timestamp queries use naive timestamps; the ETL's explicit UTC/DST validation
-policy remains the production contract. Raw EDA counts can differ from validated
-ETL counts.
-
-Phase 1 reconciled the exploratory counts with validated ETL counts and reviewed
-reporting boundaries and station IDs. Phase 2.1 now documents coverage separately
-from station availability. Cross-file duplicate checks are implemented; incremental
-ingestion remains future ETL work.
-
-## Phased roadmap
-
-1. **Scaffold (complete):** package layout, dependency metadata, agent guidance,
-   documentation, and import smoke tests.
-2. **Phase 1 — data engineering, ETL, data quality, and initial EDA (complete):**
-   Phase 1.1 initial ETL and Phase 1.3 real
-   schema adaptation, chunked multi-file ingestion, global duplicate checks,
-   Parquet/DuckDB output, and fixture tests are complete. Complete-file and
-   combined-file runs were verified, and reporting-window/station-ID decisions
-   now have regression tests and a separate derived reporting dataset.
-   Weather ingestion and aligned data contracts follow later.
-3. **Features and baseline evaluation:** Phase 2.1 calendar features, coverage
-   audits, and temporal splits are complete. Station availability verification,
-   historical extension, weather features, seasonal-naive forecasts, and
-   reproducible backtesting follow; no models have been trained.
-4. **Deep learning:** add PyTorch and TensorFlow forecasting models and compare
-   measured results against the baselines.
-5. **Tracking and MLOps:** integrate MLflow, reproducible configurations, model
-   artifacts, and pipeline monitoring.
-6. **Application layer:** expose forecasts and analytics through FastAPI and
-   Streamlit.
-7. **SQLPilot:** Streamlit, LangGraph, MCP, read-only SQL safeguards and a hosted
-   LLM development baseline are implemented. Diagnose retained live failures before
-   accuracy claims; fine-tuning and vLLM remain optional later work.
-8. **ExperimentLab:** completed station-randomized synthetic A/B design,
-   Welch inference, pre-only CUPED, power/MDE, tests and reproducible HTML reporting.
-9. **Deployment:** containerize, add CI/CD, then introduce Kubernetes and cloud
-   infrastructure as requirements justify them.
-
-## Phase 2.1 — forecasting-data preparation
-
-Preparation reads `february_2025_hourly_rides` from the reviewed DuckDB **read-only**.
-It does not reread raw CSVs, alter ETL rules, modify the EDA notebook, or change
-previous outputs. The canonical warehouse still preserves all 2,030,542 accepted
-trips, including the 273 January 31 starts. The February input has **2,030,269**
-starts in the half-open NYC calendar window `[2025-02-01, 2025-03-01)`.
-
-### Coverage findings and policy
-
-An absent station-hour is not sufficient evidence of zero demand or station
-closure. Trips cannot tell us whether bikes were unavailable, a station was closed,
-an identifier changed, or records were missing. The exported station target is
-**realized validated ride starts**, not unconstrained demand.
-
-- **Citywide:** create every UTC hour in the NYC-local February window. Only an
-  explicit complete-source confirmation permits a missing city hour to become
-  zero. The reviewed monthly manifest covers all three files without a sample
-  limit, and reconciliation passed. February has all **672 observed citywide
-  hours**, so **no citywide zero filling was needed**. Source completeness remains
-  an engineering assumption about the supplied archive, not proof that every
-  real-world trip was published.
-- **Station default:** construct a 672-hour audit grid for every observed ID,
-  retaining missing targets as nullable integers (`unknown`). Do not infer
-  opening/closing dates from first/last trips. Preserve distinct string IDs,
-  including the reviewed `6569.09_` exception.
-- **Optional sensitivity rule:** `--station-zero-horizon N` explicitly assumes
-  zero only within N hours after a past observed start at a training-seen station,
-  and only with complete-source confirmation. It never back-fills before first
-  activity, fills long silences beyond N, or fills stations first seen after
-  training. Such cells carry `is_zero_filled=True` and
-  `coverage_status=assumed_zero_recent_activity`; the original observed count
-  stays null. A 24-hour horizon in the notebook illustrates daily recency, not a
-  proven operating schedule or a selected optimal threshold. The default run
-  below does **not** enable this rule. Any later policy choice must use training
-  evidence and validation, never the reserved test set.
-- **Activity audit:** observed episodes separated by at least 24 consecutive
-  no-record hours and contiguous missing intervals describe recorded activity.
-  Missing intervals are explicitly `no_record_unknown_operation`, not confirmed
-  inactivity. Full-month first/last activity and coverage statistics are
-  retrospective audit metadata, **not predictive features or cohort filters**.
-
-Measured February results:
-
-| Check | Actual result |
-| --- | ---: |
-| Stations observed during February | 2,237 |
-| Stations seen in training (model cohort) | 2,224 |
-| Stations first seen after training | 13 |
-| Complete station-hour grid | 1,503,264 |
-| Observed station-hours | 598,630 |
-| Unknown station-hours (default policy) | 904,634 |
-| Assumed-zero station-hours (default policy) | 0 |
-| Duplicate station-hour keys | 0 |
-| Citywide and station target sums | 2,030,269 each |
-| No-record intervals | 185,766 |
-| Intervals lasting at least 24 hours | 3,051 |
-| Stations with at least one such interval | 830 |
-| Observed activity episodes | 5,079 |
-
-Median station coverage is **251 of 672 hours**; the range is 1–619, so no station
-has starts in every hour. **83 stations** have fewer than 24 observed hours. The
-longest no-record interval is **663 hours**. Of the missing station-hours, 49,401
-occur before a station's first February observation, 8,067 after its last, and
-847,166 between observations. These counts locate uncertainty; they cannot
-identify confirmed operationally inactive periods. Historical station
-availability, maintenance records, and an explicit identifier-history review
-are needed for that distinction.
-
-### Features, splits, and leakage prevention
-
-Store timestamps in UTC and derive `hour` (0–23), `weekday` (Monday=0), and
-`is_weekend` from **America/New_York** local time. This February has no DST change;
-its window is `[2025-02-01 05:00Z, 2025-03-01 05:00Z)`. Do not hard-code 672 hours
-for future months: build UTC instants between timezone-aware local boundaries.
-The current preparation module deliberately validates February only.
-
-| Split | NYC local half-open interval | Hours | Ride starts |
-| --- | --- | ---: | ---: |
-| Training | February 1 through February 21 | 480 | 1,309,480 |
-| Validation | February 21 through February 25 | 96 | 286,095 |
-| Test | February 25 through March 1 | 96 | 434,694 |
-
-All stations share these chronological boundaries. `training_station` freezes
-cohort membership using training observations only. The full grid also includes
-13 later-seen IDs for audit; future station models must filter to
-`training_station=True`, with a separate cold-start evaluation for those 13 IDs.
-No scalers, imputers, lag features, models, or learned station thresholds are
-fitted here. Calendar features are known ahead of time. Future target-dependent
-features must be shifted and computed using past observations only. Keep unknown
-labels masked: zero substitution or evaluating only busy observed hours can
-bias performance. A nullable station grid is prepared, but station model training
-still requires a reviewed label/availability policy; citywide targets are complete.
-
-### Reproduce and learn
-
-From the project root, with the existing environment:
-
-```bash
-PYTHONPATH=src .venv/bin/python -m citypulse_ai.features.cli \
-  --warehouse outputs/phase13-february-reviewed/citypulse.duckdb \
-  --output-dir outputs/phase21-forecasting \
-  --confirm-complete-source
-
-.venv/bin/python -m pytest -q
-source .venv/bin/activate
-python -m jupyterlab notebooks/02_forecasting_data_preparation.ipynb
-```
-
-Omit `--confirm-complete-source` for incomplete or unverified sources; absent
-citywide hours then remain unknown. Use a different output directory for any
-optional station-zero sensitivity run. No extra runtime dependencies were added.
-If needed, install development/notebook dependencies with
-`python -m pip install -e '.[dev,notebooks]'`, then register the environment with
-`python -m ipykernel install --sys-prefix --name citypulse-ai --display-name 'CityPulse AI (.venv)'`.
-
-Generated local files under `outputs/phase21-forecasting/` (ignored by Git):
-
-- `citywide_hourly.parquet`: complete city calendar, counts, provenance flags,
-  local calendar features, and split labels.
-- `station_hourly.parquet`: station calendar grid with nullable targets, original
-  observations, assumption flags, training membership, features, and splits.
-- `station_coverage.parquet`: per-ID coverage, first/last recorded activity,
-  totals, training membership, and longest no-record interval.
-- `coverage_gaps.parquet`: contiguous no-record intervals with half-open UTC
-  bounds and their position relative to observed activity.
-- `activity_periods.parquet`: retrospective recorded-activity episodes, not
-  operational schedules.
-- `report.json`: source warehouse SHA-256, policy configuration, boundaries,
-  dependency versions, and actual reconciliation/coverage counts.
-- `verification.json`: independent Parquet reconciliation, duplicate-key checks,
-  and confirmation that the source warehouse hash was unchanged.
-
-The pipeline reads the much smaller reviewed hourly table and builds a bounded
-1.5-million-row February grid in pandas; it never loads two million raw trip rows.
-For multi-month scale, prepare partitioned grids rather than expanding every
-station over all history in one in-memory table. The notebook reads summaries
-and uses a Parquet station filter for its example, with explanations and saved
-citywide, coverage, and station plots. Its optional zero demonstration changes
-no exported files.
-
-Verification: **75 tests passed, plus 6 subtests**, including 19 new Phase 2.1
-cases covering explicit zero policies, future-observation invariance, split and
-local-calendar boundaries, count conservation, identifier preservation, invalid
-inputs, activity/gap auditing, reproducible exports, and unchanged source bytes.
-An independent DuckDB query over the generated Parquet confirmed **zero duplicate
-station-hour keys** and both target sums equal **2,030,269**. Source hashing before
-and after preparation confirmed the reviewed warehouse was unchanged.
-
-### Limitations and historical extension
-
-February-only data offers 28 winter days and only 20 training days (less than
-three weekly cycles). Four-day validation and test intervals do not each cover
-an entire week. There is no annual seasonality, summer comparison, or evidence
-for robust model ranking. These are provisional learning splits, not a basis for
-production-quality model claims.
-
-Phase 2.2A fixes the historical extension at **24 consecutive months, January
-2024–December 2025**. The earlier 12–24-month proposal is superseded; retain these
-ingestion and evaluation safeguards:
-
-1. Acquire complete monthly NYC archives separately when authorized; retain
-   manifests, checksums, row counts, schema versions, and reconciliation audits.
-2. Extend reporting windows and process partitioned monthly outputs with
-   cross-period ride-ID auditing and DST-safe UTC hourly keys. Keep raw IDs;
-   introduce station mappings only through reviewed, versioned evidence.
-3. Obtain historical availability/maintenance evidence where possible; current
-   station lists alone cannot establish historical opening/closing dates. Review
-   missing targets and source outages before adopting any zero policy.
-4. Define chronological held-out periods and rolling-origin validation spanning
-   full weeks and seasons. Fit cohort criteria, transformations, and learned
-   features on each training history only. Do not use future activity or realized
-   future weather as forecast inputs.
-5. After data preparation is reviewed, proceed to forecasting baselines and
-   measured experiments, followed incrementally by the full project roadmap.
-
-**Phase 2.1 checkpoint:** review the preparation notebook and station availability
-policy with the mentor. Phase 2.2A historical ingestion is described below. No
-models or weather integration were implemented, and no changes were committed
-or pushed.
-
-
-## Phase 2.2A — historical ingestion expansion
-
-The final historical specification is **fixed**: NYC local starts in
-`[2024-01-01, 2026-01-01)`, training January 2024–June 2025, validation
-July–September 2025, and test October–December 2025. Forecast targets remain
-hourly citywide and station ride starts, with a **24-elapsed-hour horizon** and
-**100 stable stations selected using training history only**. The full platform
-roadmap remains unchanged. The February-only Phase 2.1 split is an educational
-checkpoint, not the final historical split.
-
-This phase adds official archive discovery, resumable streaming downloads,
-verified extraction, monthly orchestration around the unchanged Phase 1 ETL,
-manifest tracking, and global duplicate-audited ride-start-month partitions.
-Existing February data is registered by read-only reference. Source partitions
-stay immutable; each global reconciliation publishes a new canonical snapshot.
-No station cohort selection, zero filling, model training, notebook modification,
-weather integration, or deployment occurs in this phase.
-
-See [the historical ingestion guide](docs/historical_ingestion.md) for the
-architecture, boundary policy, current measurements, commands, and known gaps.
-
-```bash
-# Inspect archive directories and storage requirements without downloading ZIPs.
-PYTHONPATH=src .venv/bin/python -m citypulse_ai.etl.historical_cli \
-  --start 2024-01-01 --end 2026-01-01 --plan
-
-# Reuse or resume the two authorized pilots; existing verified partitions skip.
-PYTHONPATH=src .venv/bin/python -m citypulse_ai.etl.historical_cli \
-  --month 2024-01 2025-03 --chunk-size 50000 --memory-limit 512MB --reconcile
-```
-
-The 24-month ZIP total is **16.387 GiB**; the expanded CSV total is also
-**16.387 GiB**. The conservative plan budgets **71.318 GiB plus a 5 GiB reserve**,
-before January 2026 boundary input. Current disk space does not support the full
-range under that plan. Only January 2024 and March 2025 were downloaded as complete
-pilot sources. Expand storage and rerun the plan before processing the remaining
-21 modelling archives.
-
-A bounded January 2026 probe found **14 December 2025 starts in 53,277 sampled
-rows**. Include that archive as boundary input before declaring December start
-coverage complete, without extending the modelling window. This is not its full
-boundary count; very long rides and late publication still require review.
-Standalone pilot start-month counts remain partial until adjacent sources are
-available. Naive timestamps still use the reviewed NYC assumption; authoritative
-publisher timezone confirmation and fall-DST ambiguity resolution remain open.
-
-### Phase 2.2B — catalogue schema blocker fixed
-
-The failed union mixed Hive-style January/March paths with February's ordinary
-reviewed directory. DuckDB inferred an extra `source_month` column from the former;
-the physical Parquet schemas were identical. The catalogue now disables Hive
-inference and explicitly selects a fixed schema, preserving string identifiers,
-UTC epoch nanoseconds, and source provenance. Missing optional end-station/duration
-metadata becomes typed nulls; missing required fields or inconsistent exact epochs
-fail explicitly. Archive month and NYC ride-start month remain separate.
-
-**Verification:** 22 focused catalogue tests passed; the complete suite passed
-**112 tests plus 6 subtests**. A metadata-only union schema check on the three real
-partitions succeeded. No full historical scan, real-data ETL, downloads, or new
-snapshot construction ran in Phase 2.2B. Source partitions and unrelated edits
-were preserved. This was the Phase 2.2B checkpoint; the subsequent read-only
-integration verification is recorded below. See the
-[historical ingestion guide](docs/historical_ingestion.md#phase-22b--explicit-catalogue-schema-alignment)
-for the exact contract and regression coverage.
-
-## Engineering checkpoint — catalogue reconciliation and GCS
-
-Phase 2.2C executed the explicit 11-column union over the three existing processed
-archives in one read-only pass. It reconciled **7,087,613 reported input records**
-with **7,084,610 accepted rides** and **3,003 audited rejections**. No duplicate
-ride IDs were found within or across these sources, including rejection audits.
-The accepted counts are 1,886,925 for January 2024, 2,030,542 for February 2025,
-and 3,167,143 for March 2025. UTC precision and source provenance checks passed.
-The archive/local-start-month distinction preserved 410 December 2023 starts
-from January 2024, 273 January 2025 starts from February, and 410 February starts
-from March. These three archives are partial historical coverage; no canonical
-monthly snapshots were published. See [the reconciliation results](docs/historical_ingestion.md#actual-pilot-verification).
-
-Python GCS integration now uses ADC for uploads, downloads, existence/metadata
-checks, and explicit SHA-256 verification. The optional `cloud` extra installs
-`google-cloud-storage`; `citypulse-publish` publishes one existing Parquet under
-100 MiB without overwriting objects or local receipts. The 36-byte ADC smoke test
-passed, followed by publication and verified download of the existing reviewed
-February hourly artifact: **946,546 bytes and 598,630 station-hour rows** at
-`gs://citypulse-ai-511315-data/curated/forecasting/2025-02/reviewed-v1/february_2025_hourly_rides.parquet`.
-SHA-256, row count, schema including embedded metadata, and cloud provenance
-metadata matched. This is the existing February baseline; it does not yet include
-the additional February starts found in March's archive or constitute a complete
-24-month dataset. See [GCS setup, publication, and verification](docs/gcs.md).
-
-The completed implementation passed **158 automated tests plus 6 subtests**.
-Raw data, generated outputs/publication receipts, virtual environments, and ADC
-credentials remain outside the Git checkpoint. No forecasting models, weather
-integration, or deployment were added.
-
-### Phase 2.2D — historical source publication
-
-The historical CLI now supports explicit `--cloud-publish` and
-`--publish-existing-only` modes. Local ETL completion and cloud publication have
-separate manifest states. Source-month artifacts use hash-based revisions;
-generation-pinned verification and per-file checkpoints support safe retries
-without overwrites or deletions. Full source publication remains distinct from
-complete ride-start-month coverage and canonical snapshot construction.
-See [one-month commands, recovery, and status inspection](docs/historical_ingestion.md#phase-22d--optional-gcs-publication-after-etl).
-The implementation passed **187 tests plus 6 subtests** using offline unit and
-synthetic integration tests; no real-month uploads, downloads, or ETL runs were
-performed in this phase. A real-month upload requires separate authorization and
-an explicit file-size ceiling large enough for its validated-trip Parquet.
-
-### Cloud-backed storage retention
-
-Original source ZIPs (or February's exact original CSVs), audit JSONs and immutable
-per-month processing-manifest snapshots can now be backed up through an explicit
-create-only command. Opt-in cloud resume verifies prior checksums against unchanged
-live object generations; catalogue construction can restore its required Parquet
-and rejection-audit inputs to a persistent cache. Local-only behavior stays unchanged.
-The offline retention report explains recovery requirements and blockers; it has
-no deletion mode. See [commands and retention policy](docs/cloud_retention.md).
-
-The implementation passed **235 automated tests plus 6 subtests** using mocked GCS
-operations and synthetic files. The real metadata-only dry run identified 52
-potential candidates (3.34 GiB), with **zero bytes eligible** under current evidence:
-source/manifest backups and February's full historical publication still need
-separately authorized verification. No real transfers, historical ETL, cleanup,
-commits or pushes were performed during this implementation.
-
-## Local MLP inference API
-
-The existing PyTorch citywide MLP can be served locally with `/health` and
-`/predict`, using its saved weights and training-fitted scalers. See
-[the FastAPI guide](docs/local_mlp_api.md) for artifact checks, launch commands,
-request examples, elapsed-hour/DST semantics and exploratory-model limitations.
-
-## Inference continuous integration
-
-[GitHub Actions CI](docs/github_actions_ci.md) checks repository/Docker
-configuration and artifact-free gateway and TensorFlow worker contracts on
-pushes to `main` and pull requests targeting `main`. Trained-model parity remains
-a separate local check; CI does not train models, build images or deploy services.
-
-## Local experiment tracking
-
-[Local MLflow tracking](docs/local_mlflow_tracking.md) imports existing preliminary
-baseline, XGBoost, MLP and LSTM results into an isolated, metadata-only local store.
-It does not retrain models or copy checkpoints and datasets.
+**Status:** Three-component v1 implemented, CI-verified and documented. Its scope
+is reproducible research and containerized demonstrations, not public production
+hosting or evidence of a real redistribution intervention.

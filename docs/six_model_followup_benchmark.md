@@ -1,5 +1,10 @@
 # Six-method station100 follow-up benchmark
 
+**Current status:** [Forecasting v1 serving and container verification](forecasting_v1.md)
+subsequently completed. The “Remaining work” section below preserves the state
+at benchmark finalization; operational publication-latency replay remains outside
+this retrospective release.
+
 This phase adds the frozen station MLP and LSTM to the saved XGBoost, TFT,
 lag-24 and lag-168 test benchmark. **The earlier four-method test results were
 already disclosed before MLP/LSTM development. This is a follow-up extension,

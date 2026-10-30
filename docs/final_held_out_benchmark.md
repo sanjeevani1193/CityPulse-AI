@@ -1,5 +1,9 @@
 # Final held-out 100-station forecasting benchmark
 
+**Current status:** [the six-method follow-up](six_model_followup_benchmark.md)
+and [station-level FastAPI/Docker verification](forecasting_v1.md) are complete.
+The deployment-pending sections below record this earlier evaluation milestone.
+
 This evaluation freezes the existing six-epoch TFT (`epoch-006.pt`) and the
 selected CPU XGBoost 3.2.0 model (300 trees, depth 6, learning rate 0.05, seed 42).
 It does not train, tune, refit preprocessing or alter their validation scores.

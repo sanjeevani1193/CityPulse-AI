@@ -1,9 +1,9 @@
 # Final 100-station TFT training
 
-This document records the training/validation milestone. The later authorized
-[final held-out benchmark](final_held_out_benchmark.md) is complete; final-model
-deployment integration remains pending. Statements about held-out status below
-describe the earlier milestone.
+**Current status:** the [six-method benchmark](six_model_followup_benchmark.md)
+and [Forecasting v1 native/container serving verification](forecasting_v1.md)
+are complete. The training/validation measurements below are preserved from the
+original phase; historical held-out/pending statements are not current status.
 
 ## Finalized six-epoch experiment
 
