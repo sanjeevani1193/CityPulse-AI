@@ -1,4 +1,4 @@
-# XGBoost Cloud Run CD — manual deployment verified
+# XGBoost Cloud Run CD — automatic deployment verified
 
 The approved bootstrap is complete: **14 additions total, zero changes or
 deletions**. The first apply created 11 additions before GCP rejected a pool
@@ -13,7 +13,7 @@ generation-pinned bytes were verified. The manifest records request generation
 `1793459483219844` and reference generation `1793459483478652`.
 The one manual GitHub Actions deployment passed. Automatic push deployment
 was disabled for that manual run. Automatic deployment is now enabled for
-relevant main pushes; its controlled verification is pending. [Initial deployment and cleanup](cloudrun_xgboost.md).
+relevant main pushes; the controlled automatic verification passed. [Initial deployment and cleanup](cloudrun_xgboost.md).
 
 ## Verified manual run — October 31, 2026
 
@@ -59,8 +59,45 @@ The run made six authenticated requests plus one anonymous denial. Registry,
 source storage and logging continue to have retention costs; none were pruned.
 
 Manual CD is verified. Automatic main-push deployment has now been approved
-and enabled; the one controlled push verification is pending. Documentation-only
+and enabled; the one controlled push verification passed. Documentation-only
 changes do not trigger deployment.
+
+## Verified automatic run — October 31, 2026
+
+- Source commit: `a4f75027b27f52bef99041754d2f4599bfa7cfeb`.
+- [Successful automatic push CD](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756006).
+- [Inference CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756373),
+  [SQLPilot CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756374)
+  and [ExperimentLab CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756309)
+  all passed on this exact SHA. Their final job completed at 15:52:42 UTC;
+  the credentialed deployment job started at 15:52:59 UTC. The lightweight gate
+  starts on push; cloud authentication/build/deployment wait for successful CI.
+- One successful Cloud Build: `76247c6c-d2ec-4df6-87b0-d003ca9210ba`,
+  **99.85 seconds**, no retry or duplicate build.
+- Ready revision: `citypulse-xgboost-00003-7pj`.
+- Digest: `sha256:1b3f4725c99b08604cc0d95bc95429591d61eeeacb023e958afed71eb204981c`.
+- Registry image size: **218,135,370 bytes** (~208.03 MiB).
+
+Real authenticated `/health`, `/stations`, `/models` and `/predict` checks passed:
+100 exact station IDs, XGBoost ready, 24 elapsed-hour predictions, correct UTC/NYC
+metadata, **0.0 saved-validation maximum absolute error**, deterministic repeat,
+future-input 422 and anonymous 403. Combined client verification took 2.322 seconds;
+this is not a cold-start/load benchmark. Cloud Run prediction request log latencies
+were 0.364/0.237 seconds. All 21 reviewed revision logs were below ERROR severity.
+The fresh Terraform plan reported **no changes**. Only image changed in the service
+spec; CPU/RAM, identity, scaling, concurrency and startup configuration are preserved.
+No Terraform apply, IAM change, model change, manual dispatch or new service was
+needed to enable automatic deployment.
+
+The build list-cost estimate is **$0.00499**, before credits/allowances and
+ancillary costs, not an observed invoice or updated credit balance. Three image
+versions are retained; no automatic image/source cleanup was performed. Retention
+can add storage costs and needs a separate reviewed cleanup decision.
+
+The final result is recorded with a docs-only push; README/docs paths are outside
+CD trigger filters, so this cannot create a deployment loop. The 67 focused local
+tests passed with one training test deselected. Manual dispatch remains supported,
+but do not manually dispatch the same commit merely to repeat an automatic run.
 
 ## Small deployment path
 
@@ -201,7 +238,8 @@ demo uploads; committing/pushing the reviewed files; and **one** manual CD build
 image rollout and bounded HTTP verification. Refresh the plan if inputs change,
 back up local state privately, then apply only the approved plan. Capture the
 uploaded demo generations, update the manifest and repeat local checks. Push
-normally with the manual-only job condition intact, wait for CI, then manually dispatch:
+normally, wait for CI, and use manual dispatch only when an intentional manual
+deployment is needed (not to repeat an automatic deployment):
 
 ```sh
 gh workflow run cloudrun-cd.yml --ref main

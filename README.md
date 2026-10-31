@@ -339,7 +339,8 @@ Anonymous invocation is denied; there is no public portfolio endpoint.
 [Manual GitHub Actions CD is verified](docs/cloudrun_cd.md), including secure WIF,
 Cloud Build, an image-only rollout and exact prediction parity. Automatic push
 deployment is enabled for relevant main-branch changes after exact-commit CI;
-the controlled automatic verification is pending.
+the controlled push-to-deployment verification passed with exact saved-validation
+prediction parity.
 
 ```bash
 git clone https://github.com/sanjeevani1193/CityPulse-AI.git

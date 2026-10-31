@@ -63,7 +63,7 @@ state and `deployment.auto.tfvars.json` are local, ignored, owner-only readable;
 a private state backup was byte/hash verified. Do not commit or upload these
 files as public release artifacts. CD was absent at this Phase 3 checkpoint;
 [the subsequent manual GitHub Actions deployment is verified](cloudrun_cd.md),
-with automatic push deployment still disabled.
+with subsequent main-push automatic CD also verified.
 
 Observed build duration was **75.22 seconds**: estimated build list cost
 **$0.00376** at the published $0.003/minute e2-medium rate, before allowances,
