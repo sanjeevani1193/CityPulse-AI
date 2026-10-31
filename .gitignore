@@ -265,3 +265,6 @@ credentials.*
 /infra/terraform/*.tfvars.json
 /infra/terraform/crash.log
 /infra/terraform/crash.*.log
+
+# Ephemeral GitHub OIDC credentials (never a build input).
+gha-creds-*.json

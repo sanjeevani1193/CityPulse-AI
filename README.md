@@ -336,6 +336,8 @@ and local-state Terraform. It returned 24 forecasts with exact saved-validation
 parity. The six-model application remains intact; other methods are not deployed
 in this pilot. [Service URL, verification, costs and management guide](docs/cloudrun_xgboost.md).
 Anonymous invocation is denied; no public portfolio endpoint or CD is enabled.
+[Phase 4 manual CD workflow and safeguards](docs/cloudrun_cd.md) are prepared;
+manual verification is pending and automatic push deployment remains disabled.
 
 ```bash
 git clone https://github.com/sanjeevani1193/CityPulse-AI.git

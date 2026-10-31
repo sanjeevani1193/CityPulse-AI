@@ -122,6 +122,8 @@ resource "google_cloud_run_v2_service" "api" {
     }
   }
   lifecycle {
+    # CD owns only the image. Terraform still detects all other service drift.
+    ignore_changes = [template[0].containers[0].image]
     precondition {
       condition     = var.image_digest != "" && var.invoker_member != ""
       error_message = "Deployment requires a verified image digest and an explicit authenticated invoker."

@@ -1,0 +1,34 @@
+{
+  "inputs": {
+    "preprocessing.json": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-lstm/station100-20261027/preprocessing.json",
+      "generation": "1793103659200077",
+      "size_bytes": 24894,
+      "sha256": "f788108df037662b5bbc0739f6f22f105e798e2839bed1e67100cf570b0467fe"
+    },
+    "xgboost/model.ubj": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-xgboost/station100-20261026/model.ubj",
+      "generation": "1793028513803336",
+      "size_bytes": 2502679,
+      "sha256": "f7a64cc25e38893b0a566dab2957034fd81f8db6bdf2c712abace79015451b2a"
+    },
+    "xgboost/preprocessing.json": {
+      "cloud_path": "gs://citypulse-ai-511315-data/models/station-xgboost/station100-20261026/preprocessing.json",
+      "generation": "1793028514198941",
+      "size_bytes": 4222,
+      "sha256": "193bbb9b0da2b94934314f25ca25abb4783ba7be729919a44bccd6b145dcd159"
+    },
+    "demo-request.json": {
+      "cloud_path": "gs://citypulse-ai-511315-data/cloudrun-cd/validation/demo-request.json",
+      "generation": "1793459483219844",
+      "size_bytes": 28209,
+      "sha256": "83b2a1baaba8c7f5608d4feb59ba0383aacf0bd4ebe679b7ac12d0b7cebdb91a"
+    },
+    "demo-references.json": {
+      "cloud_path": "gs://citypulse-ai-511315-data/cloudrun-cd/validation/demo-references.json",
+      "generation": "1793459483478652",
+      "size_bytes": 4376,
+      "sha256": "b423682276bc11d84c15fc308ab6f9c6e85007ed4baace67e372b1270dd89ec9"
+    }
+  }
+}
