@@ -77,7 +77,7 @@ jobs:
       - name: Require serving runtimes
         run: python -c "import torch, xgboost, fastapi, httpx, sklearn, duckdb, pyarrow"
       - name: Run required gateway contracts without local artifacts
-        run: python -m pytest tests/ci/test_gateway.py tests/ci/test_station_contracts.py tests/test_forecasting_diagnostics.py -q --tb=short
+        run: python -m pytest tests/ci/test_gateway.py tests/ci/test_station_contracts.py tests/test_forecasting_diagnostics.py tests/test_cloudrun_xgboost.py -q --tb=short
 
   worker-tests:
     name: Artifact-free TensorFlow worker contracts

@@ -330,6 +330,12 @@ Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjee
 
 ## Reproducing the project
 
+**Cloud deployment preparation (not deployed):** a separate XGBoost-only Cloud Run
+entrypoint, lightweight amd64 image and local-state Terraform are prepared. The
+six-model system remains intact. See [implementation, plans, costs and approval
+gates](docs/cloudrun_xgboost.md). No cloud APIs/builds/deployment were enabled
+during preparation; authenticated deployment requires a separately approved Phase 3.
+
 ```bash
 git clone https://github.com/sanjeevani1193/CityPulse-AI.git
 cd CityPulse-AI

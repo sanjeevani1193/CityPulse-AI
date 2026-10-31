@@ -1,0 +1,10 @@
+# Manual Phase 3 operation only; no trigger or new CI/CD pipeline.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args: [build, '--platform=linux/amd64', '-f', docker/cloudrun-xgboost.Dockerfile, '-t', '${_IMAGE}', '.']
+images: ['${_IMAGE}']
+serviceAccount: projects/$PROJECT_ID/serviceAccounts/citypulse-xgb-builder@$PROJECT_ID.iam.gserviceaccount.com
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_MEDIUM
+timeout: 900s

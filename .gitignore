@@ -254,3 +254,14 @@ credentials.*
 
 # Isolated SQLPilot application environment
 .venv-sqlpilot*/
+
+# Terraform is local-only; commit the dependency lockfile, never state or plans.
+/infra/terraform/.terraform/
+/infra/terraform/*.tfstate
+/infra/terraform/*.tfstate.*
+/infra/terraform/*.tfplan
+/infra/terraform/*.tfplan.json
+/infra/terraform/*.tfvars
+/infra/terraform/*.tfvars.json
+/infra/terraform/crash.log
+/infra/terraform/crash.*.log

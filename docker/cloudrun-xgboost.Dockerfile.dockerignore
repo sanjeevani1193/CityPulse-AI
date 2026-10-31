@@ -1,0 +1,15 @@
+**
+!docker/
+!docker/cloudrun-xgboost.Dockerfile
+!docker/cloudrun-xgboost.requirements.txt
+!cloudbuild.yaml
+!src/
+!src/citypulse_ai/
+!src/citypulse_ai/**
+!artifacts/
+!artifacts/preprocessing.json
+!artifacts/xgboost/
+!artifacts/xgboost/model.ubj
+!artifacts/xgboost/preprocessing.json
+**/__pycache__/
+**/*.pyc
