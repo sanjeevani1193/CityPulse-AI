@@ -61,7 +61,9 @@ Private verification evidence is under ignored
 plans/apply records, logs, snapshots and `deployment-summary.json`. Terraform
 state and `deployment.auto.tfvars.json` are local, ignored, owner-only readable;
 a private state backup was byte/hash verified. Do not commit or upload these
-files as public release artifacts. No CD has been implemented.
+files as public release artifacts. CD was absent at this Phase 3 checkpoint;
+[the subsequent manual GitHub Actions deployment is verified](cloudrun_cd.md),
+with automatic push deployment still disabled.
 
 Observed build duration was **75.22 seconds**: estimated build list cost
 **$0.00376** at the published $0.003/minute e2-medium rate, before allowances,

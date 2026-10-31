@@ -1,4 +1,4 @@
-# XGBoost Cloud Run CD — manual verification pending
+# XGBoost Cloud Run CD — manual deployment verified
 
 The approved bootstrap is complete: **14 additions total, zero changes or
 deletions**. The first apply created 11 additions before GCP rejected a pool
@@ -11,8 +11,55 @@ backups are retained locally; never reuse the stale pre-apply plan.
 Both approved private validation JSON files were uploaded create-only and their
 generation-pinned bytes were verified. The manifest records request generation
 `1793459483219844` and reference generation `1793459483478652`.
-The one manual GitHub Actions deployment is pending. Automatic push deployment
-is disabled in code. [Initial deployment and cleanup](cloudrun_xgboost.md).
+The one manual GitHub Actions deployment passed. Automatic push deployment
+remains disabled in code. [Initial deployment and cleanup](cloudrun_xgboost.md).
+
+## Verified manual run — October 31, 2026
+
+- Deployment source: `61bb8dd6d963c74f6f3e672dd34bd833ab7e2260`.
+- [Successful manual CD run](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41213999783).
+- All three required CI suites passed on that exact commit. The push-triggered
+  CD run was skipped; the single manual run passed its gate, WIF authentication,
+  five-input recovery, build, rollout and HTTP verification.
+- Cloud Build: `7f9caa9e-7fae-40b4-9fc9-cad8b00fe9dd`, **SUCCESS**, 107.39 seconds;
+  exactly one new build, no retry.
+- Immutable digest: `sha256:23b97afb9b6d5b6d3577cb2d974e459af8a245a1677eb3ec6d9f664a8ecf0cd8`.
+- Registry image size: **218,131,742 bytes** (~208.03 MiB); two retained versions,
+  including the original rollback image. No image deletion occurred.
+- Ready revision: `citypulse-xgboost-00002-ss2`.
+- Authenticated URL: https://citypulse-xgboost-lw3wuexzqq-ey.a.run.app.
+
+| Real runner check | Result |
+| --- | --- |
+| `/health`, `/stations`, `/models` | 200; model ready, exact 100 station IDs, XGBoost only |
+| `/predict` | 200; 24 forecasts, correct UTC/NYC-local timestamps and model identity |
+| Saved validation reference | **0.0 maximum absolute prediction error** |
+| Repeated request | Identical response |
+| Future observation | 422 |
+| Anonymous health | 403 |
+
+The runner's complete bounded verification took **2.334 seconds**, not a cold
+start or load benchmark. Cloud Run logged prediction request latencies of
+0.355/0.242 seconds. Reviewed 21 revision log entries contained zero
+ERROR-or-higher entries. The post-CD Terraform plan reports **no changes**.
+Only image changed in the service spec; generated operation/last-modifier audit
+metadata changed as expected. CPU, memory, identity, scaling, concurrency and
+startup settings match the initial deployment. Original verification WIF and
+stopped historical VM snapshots remain identical. No forecasting/data/ETL changes.
+
+Sanitized `deployment.json` and `verification.json` are retained in the linked
+Actions run for 14 days; private evidence and state backups remain under ignored
+`outputs/cloudrun-xgboost/phase4/`. State, model bytes, inputs, credentials and
+source archives were not published as GitHub artifacts.
+
+Build list-cost estimate: **$0.00537** at $0.003/minute, before allowances/credits
+and ancillary charges. This is not an actual invoice or updated trial balance.
+The run made six authenticated requests plus one anonymous denial. Registry,
+source storage and logging continue to have retention costs; none were pruned.
+
+Manual CD is verified. **Automatic CD is still disabled**. Enabling it requires
+separate approval, a reviewed main-push job condition and one approved relevant
+push to verify that path. Do not dispatch another build merely for these docs.
 
 ## Small deployment path
 
@@ -117,7 +164,7 @@ updates are not reverted. All other settings, IAM and resource drift remain
 managed. Preserve the current ignored `deployment.auto.tfvars.json` and state;
 `deploy_service` must remain true. No state/plan/credentials go to GitHub.
 
-## Local validation and approval sequence
+## Local validation and deployment procedure
 
 ```sh
 terraform -chdir=infra/terraform fmt -check
@@ -141,11 +188,13 @@ Terraform fmt/validate and the refreshed plan passed. Static checks covered 159
 Python files; whitespace and relative documentation links passed. Existing
 Starlette/httpx deprecation warning remains. `actionlint` is not installed; YAML
 and deterministic workflow-policy tests passed, but GitHub runner, WIF, build
-and real cloud CD parity are **not yet exercised**. Original Terraform state and
+and real cloud CD parity subsequently passed in the manual run recorded above. Original Terraform state and
 unrelated README draft checksums are unchanged. Private reviewed plan text/JSON
 is under ignored `outputs/cloudrun-xgboost/phase4/` with owner-only permissions.
 
-The ignored binary plan is an approval preview, **not authorization to apply**.
+Initial approval and the manual sequence below have been completed. Future
+updates still require reviewed plans; do not rerun the initial bootstrap or the
+stale saved plans. A saved plan by itself is **not authorization to apply**.
 Before proceeding, approve: the 14 additive IAM/WIF resources; the two private
 demo uploads; committing/pushing the reviewed files; and **one** manual CD build,
 image rollout and bounded HTTP verification. Refresh the plan if inputs change,
