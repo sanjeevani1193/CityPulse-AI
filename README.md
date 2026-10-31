@@ -2,7 +2,7 @@
 
 ### Urban mobility forecasting · Agentic data analytics · Statistical experimentation
 
-**A reproducible, three-part ML and AI engineering platform built around NYC Citi Bike data.** CityPulse AI combines (1) large-scale historical data engineering and 24-hour station-level forecasting, (2) an LLM-powered text-to-SQL analyst with LangGraph and MCP, and (3) a statistically grounded *synthetic* A/B experimentation lab. Its emphasis is on measurable results, bounded and auditable execution, and repeatable verification—not a claim of production deployment or real-time streaming.
+**~90 million accepted Citi Bike ride starts, six evaluated forecasting methods, and a private XGBoost API deployed on Google Cloud Run.** CityPulse AI combines historical data engineering and station-level forecasting with **SQLPilot**, a LangGraph/MCP text-to-SQL application, and **ExperimentLab**, a synthetic statistical experimentation lab. Terraform manages deployment infrastructure; GitHub Actions CI/CD verifies and deploys relevant main-branch changes using keyless Workload Identity Federation.
 
 [Forecasting](#forecasting) · [SQLPilot](#sqlpilot) · [ExperimentLab](#experimentlab) · [Architecture](#architecture) · [Reproduce](#reproduce) · [CI evidence](#verification) · [Limitations](#limitations) · [Documentation](#documentation)
 
@@ -10,7 +10,7 @@
 
 | Component | Implemented | Key verified result |
 |---|---|---|
-| **Forecasting & MLOps** | GCP-backed DuckDB/Parquet ETL; four trained ML/deep-learning models; two seasonal baselines; FastAPI, Docker and MLflow | **89,995,902** accepted starts processed; **3.3663 MAE** for XGBoost on **220,800** held-out station-hour forecasts |
+| **Forecasting & MLOps** | GCP-backed DuckDB/Parquet ETL; four trained models + two seasonal baselines; MLflow; FastAPI on Cloud Run; Docker, Terraform and GitHub Actions CI/CD | **89,995,902** accepted starts processed; **3.3663 MAE** for XGBoost on **220,800** held-out station-hour forecasts |
 | **SQLPilot** | Streamlit UI; LangGraph workflow; local MCP client/server; Groq-hosted LLM; constrained read-only DuckDB queries | **6/9** correct overall outcomes in the initial **live** LLM evaluation; **65** container tests passed |
 | **ExperimentLab** | Randomized 100-station synthetic trial; Welch inference; CUPED; power/MDE calculations; HTML report | CUPED-adjusted synthetic effect **+2.7531** starts/station/day, 95% CI **[1.7190, 3.7871]**; **19** tests passed |
 
@@ -32,25 +32,45 @@ These tasks belong together analytically, but they have different data contracts
 
 ```mermaid
 flowchart TB
-    A[NYC Citi Bike historical trip files] --> B["Validated, memory-bounded ETL<br/>Python + DuckDB + Parquet"]
-    B --> C["GCP Cloud Storage<br/>reproducible artifacts"]
-    B --> F["Station-hour features<br/>train / validation / test"]
-    F --> M["Six forecasting methods<br/>XGBoost, MLP, TFT, LSTM, lag-24, lag-168"]
-    M --> S["FastAPI inference<br/>CPU Docker + CI"]
-    M --> T[MLflow experiment tracking]
+    subgraph Forecasting["Historical data and six-method forecasting benchmark"]
+        A["NYC Citi Bike historical trip files"] --> B["Validated, memory-bounded ETL<br/>Python + DuckDB + Parquet"]
+        B --> C["Private GCS<br/>data, model artifacts and recovery"]
+        B --> F["Station-hour features<br/>train / validation / test"]
+        F --> M["Train four models; evaluate six methods<br/>XGBoost, MLP, TFT, LSTM, lag-24, lag-168"]
+        M --> S["Full six-model FastAPI application<br/>CPU Docker Compose; verified separately"]
+        M --> T["MLflow experiment tracking"]
+    end
 
-    B --> P["Approved local sample<br/>1,998 accepted trips"]
-    U[Streamlit SQLPilot UI] --> G["LangGraph agent<br/>schema → generate → execute → explain"]
-    G -->|Question and approved schema| L["Groq GPT OSS 20B<br/>SQL generation only"]
-    L -->|SQL or clarification| G
-    G <--> MC[MCP client]
-    MC <--> MS["Custom local MCP server<br/>sqlpilot_schema / sqlpilot_query"]
-    MS --> V["SQL AST validation + limits<br/>read-only DuckDB"]
-    P --> V
-    V --> G
+    subgraph Cloud["Cloud deployment: XGBoost only, authenticated access"]
+        M -->|Frozen XGBoost only| PK["XGBoost Docker build context"]
+        C -->|Pinned small artifacts| PK
+        PK --> CB["Cloud Build<br/>linux/amd64 image"]
+        GH["Relevant push to main or manual dispatch"] --> CI["GitHub Actions<br/>all required CI on the exact commit"]
+        CI --> WIF["OIDC / Workload Identity Federation"]
+        WIF --> PK
+        CB --> AR["Private Artifact Registry"]
+        AR -->|Immutable image digest via Actions| R["Cloud Run FastAPI<br/>authenticated XGBoost forecasts"]
+        TF["Terraform IaC<br/>local, gitignored state"] -.-> WIF
+        TF -.-> AR
+        TF -.-> R
+    end
 
-    E[Fully synthetic 100-station experiment] --> W["Randomization + Welch test<br/>CUPED + power / MDE"]
-    W --> H[Reproducible HTML analysis report]
+    subgraph SQLPilot["SQLPilot: separate Streamlit application"]
+        B --> P["Approved local sample<br/>1,998 accepted trips"]
+        U["Streamlit UI"] --> G["LangGraph agent<br/>schema, generate, execute, explain"]
+        G -->|Approved question and schema| L["Groq GPT OSS 20B"]
+        L -->|SQL or clarification| G
+        G <--> MC["MCP client"]
+        MC <--> MS["Local MCP server<br/>sqlpilot_schema / sqlpilot_query"]
+        MS --> V["SQL AST validation and limits<br/>read-only DuckDB"]
+        P --> V
+        V --> G
+    end
+
+    subgraph ExperimentLab["ExperimentLab: separate synthetic analysis"]
+        E["Synthetic randomized 100-station experiment"] --> W["Welch inference + CUPED<br/>confidence intervals, power and MDE"]
+        W --> H["Reproducible HTML report"]
+    end
 ```
 
 **Boundary worth noting:** Groq receives approved question/schema context to generate candidate SQL; SQL validation, tool execution and result handling remain local. The MCP server exposes only named operations, not unrestricted machine access. SQLPilot is an interactive analysis tool; it does **not** access the full private historical GCS archive for each query.
@@ -67,7 +87,7 @@ flowchart TB
 - **Processed volume:** **89,995,902 accepted recorded starts** and **19,362,014 unique station-hour records** within the modelling window. The final audit found **zero duplicate ride IDs or station-hour keys**. These are accepted-record counts, not a claim that the publisher observed every physical rental.
 - **Data processing:** Memory-bounded Python/DuckDB ETL, Parquet outputs, duplicate ride-ID auditing, start-station validation, invalid-duration filtering and reconciliation checks.
 - **Time handling:** `America/New_York` calendar semantics, including daylight saving time (DST) changes; hour windows are based on **elapsed hours**, not assumptions that every local day contains exactly 24 wall-clock hours.
-- **Cloud/MLOps:** GCP Cloud Storage for reproducible data/model artifacts, MLflow experiment tracking, Docker-based inference and automated GitHub Actions verification.
+- **Cloud/MLOps:** Private GCS artifacts, MLflow experiment tracking, Docker-based inference, Terraform-managed Cloud Run and GitHub Actions CI/CD.
 
 These historical data counts describe the overall ingestion/aggregation pipeline. The predictive benchmark uses a smaller, deliberately selected set of **100 stations**; they should not be confused with the 19.36M full-history station-hour rows.
 
@@ -174,7 +194,7 @@ training run. See [bias, station and temporal diagnostics](docs/forecasting_v1_d
 
 - FastAPI supports timestamped **24-step station-level forecasts** with a model-selection interface; XGBoost is the default and TFT includes quantiles.
 - Native and container HTTP checks exercised **all six methods** with frozen model artifacts. MLflow tracks experiments.
-- The service is **containerized and verified**, not publicly production-hosted.
+- **Cloud deployment:** only the frozen XGBoost adapter is deployed to authenticated Cloud Run. The full six-model gateway and separate TensorFlow worker remain available in the repository; SQLPilot and ExperimentLab are not deployed there.
 
 ### MLOps and software engineering
 
@@ -189,10 +209,17 @@ training run. See [bias, station and temporal diagnostics](docs/forecasting_v1_d
   remain outside Git. The earlier citywide experiments remain distinct studies.
 - **Serving:** trusted-artifact adapters verify hashes before deserialization,
   reject future/duplicate/missing input hours, and never fit during requests.
-  TensorFlow runs in a separate worker; worker outage/recovery is verified.
-- **Packaging and CI:** CPU Docker images use non-root users, health checks and
-  read-only artifact mounts. Standard GitHub runners verify contracts and
-  containers; **no automatic cloud deployment/CD pipeline is claimed**.
+  In the full application, TensorFlow runs in a separate worker; worker outage/recovery is verified.
+- **Packaging:** non-root CPU Docker images have health checks. The full application
+  mounts trusted artifacts read-only; the XGBoost-only cloud image packages three
+  checksum-verified artifacts and omits PyTorch/TensorFlow.
+- **Infrastructure and CI/CD:** Terraform manages the private registry, dedicated
+  identities, WIF and authenticated Cloud Run service. Relevant main pushes wait
+  for all three CI workflows on the exact commit, then Cloud Build produces an
+  amd64 image and Actions deploys its immutable digest. No permanent service-account
+  keys are used. Concurrency serializes deployments; there are no automatic retries.
+  The service uses request-based billing, min 0/max 1, 0.5 CPU and 512 MiB. These
+  are resource controls, not a hard spending cap.
 
 **Technical details:** [Forecasting serving guide](docs/forecasting_v1.md) · [Six-model follow-up benchmark](docs/six_model_followup_benchmark.md) · [Diagnostic analysis](docs/forecasting_v1_diagnostics.md) · [Cloud release verification](docs/cloud_release_verification.md).
 
@@ -312,9 +339,12 @@ require a different real-world design. No real intervention was performed.
 
 <a id="verification"></a>
 
-## Verification & CI
+## Verification & CI/CD
 
-GitHub Actions runs configured tests automatically on hosted runners after repository changes. A green job means the **specified checks passed**; it is not proof that every future question/model response will be correct. No public deployment pipeline is implied by the CI checks alone.
+GitHub Actions runs tests on standard hosted runners. For deployment-relevant
+main changes, the cloud job starts only after all three required CI suites pass
+on that exact SHA. Documentation-only pushes do not build or deploy. A green job
+establishes the specified checks, not universal model or LLM correctness.
 
 | Component | Verified v1 release checks | Evidence |
 |---|---|---|
@@ -322,7 +352,18 @@ GitHub Actions runs configured tests automatically on hosted runners after repos
 | SQLPilot | **65 tests passed**; Docker, HTTP/WebSocket and MCP verification | [SQLPilot CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40974069796) |
 | ExperimentLab | **19 tests passed**; report generation and checksums verified | [ExperimentLab CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/40974069852) |
 
-These tests cover code contracts, SQL policies, MCP communication, application behavior, container runtime and experiment calculations. **SQLPilot's nine-case live model evaluation is a different measurement** from its 65 mostly deterministic/mock-assisted engineering tests.
+The table preserves original v1 release checks; subsequent deployment checks are linked below. These tests cover code contracts, SQL policies, MCP communication, application behavior, container runtime and experiment calculations. **SQLPilot's nine-case live model evaluation is a different measurement** from its 65 mostly deterministic/mock-assisted engineering tests.
+
+**Cloud deployment and automatic CD verified October 31, 2026:**
+[successful push-to-deployment run](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756006)
+from `a4f7502`, after successful [Inference](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756373),
+[SQLPilot](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756374)
+and [ExperimentLab](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/41216756309) CI.
+Authenticated `/health`, `/stations`, `/models` and `/predict` passed: **100
+stations, 24 forecasts, exact saved-validation parity (maximum error 0.0)**,
+deterministic repeats, future-input 422 and anonymous 403. Terraform reported
+**no drift**. These are bounded smoke checks, not a load test, production-traffic
+claim or availability SLO. [Architecture, run IDs, image digest and reproduction](docs/cloudrun_cd.md).
 
 Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjeevani1193/CityPulse-AI/commit/f8e497e)** (`main`).
 
@@ -330,17 +371,10 @@ Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjee
 
 ## Reproducing the project
 
-**Initial cloud deployment verified:** the XGBoost-only FastAPI service is running
-on authenticated Cloud Run in Frankfurt, deployed through one amd64 Cloud Build
-and local-state Terraform. It returned 24 forecasts with exact saved-validation
-parity. The six-model application remains intact; other methods are not deployed
-in this pilot. [Service URL, verification, costs and management guide](docs/cloudrun_xgboost.md).
-Anonymous invocation is denied; there is no public portfolio endpoint.
-[Manual GitHub Actions CD is verified](docs/cloudrun_cd.md), including secure WIF,
-Cloud Build, an image-only rollout and exact prediction parity. Automatic push
-deployment is enabled for relevant main-branch changes after exact-commit CI;
-the controlled push-to-deployment verification passed with exact saved-validation
-prediction parity.
+**Private cloud API:** XGBoost is deployed on authenticated Cloud Run in Frankfurt;
+opening its URL without credentials returns 403. [Service URL, authorized verification
+and cleanup](docs/cloudrun_xgboost.md) · [Terraform and automatic CI/CD](docs/cloudrun_cd.md).
+The local commands below run the **full six-model application**, not the cloud-only adapter.
 
 ```bash
 git clone https://github.com/sanjeevani1193/CityPulse-AI.git
@@ -426,7 +460,7 @@ See [design and reproduction details](docs/experimentlab.md).
 - **LLM reliability:** One successful demo query does not establish general accuracy; the initial nine-case live baseline was 6/9, with three documented failures and no proven improved retest.
 - **Privacy and safety:** The MCP server restricts queries; hosted LLM use transmits the approved question/schema context externally. Rate limits and Zero Data Retention settings are account/provider dependent.
 - **Synthetic causal evidence:** ExperimentLab is an educational/reproducible simulation, not evidence that Citi Bike implemented or benefited from a redistribution policy.
-- **Deployment:** Container and CI verification have been completed, but no public production hosting, availability SLO or automated CD deployment is claimed.
+- **Deployment:** Private XGBoost cloud inference and automatic CI/CD are verified. The full six-model app, SQLPilot and ExperimentLab have separate local/container verification; public hosting, production traffic, load-test capacity and an availability SLO are not claimed.
 
 <a id="documentation"></a>
 
@@ -437,7 +471,7 @@ See [design and reproduction details](docs/experimentlab.md).
 | Final data and labels | [Final station dataset](docs/final_tft_dataset.md) · [Versioned labels](docs/station_training_labels.md) · [Historical ETL](docs/historical_ingestion.md) |
 | Model development | [TFT training](docs/tft_training.md) · [XGBoost](docs/station_xgboost_benchmark.md) · [MLP](docs/station_mlp_forecasting.md) · [LSTM](docs/station_lstm_forecasting.md) |
 | Evaluation | [Original four-method test](docs/final_held_out_benchmark.md) · [Six-method follow-up](docs/six_model_followup_benchmark.md) · [Saved-prediction diagnostics](docs/forecasting_v1_diagnostics.md) |
-| Serving and MLOps | [Forecasting v1](docs/forecasting_v1.md) · [Secure hosted verification](docs/cloud_release_verification.md) · [MLflow](docs/local_mlflow_tracking.md) · [Inference CI](docs/github_actions_ci.md) |
+| Serving and MLOps | [Forecasting v1](docs/forecasting_v1.md) · [Secure hosted verification](docs/cloud_release_verification.md) · [MLflow](docs/local_mlflow_tracking.md) · [Inference CI](docs/github_actions_ci.md) · [Cloud Run/Terraform](docs/cloudrun_xgboost.md) · [Automatic CD](docs/cloudrun_cd.md) |
 | SQLPilot | [Release and Docker](docs/sqlpilot_release.md) · [Agent application](docs/sqlpilot_application.md) · [SQL core](docs/sqlpilot_core.md) · [Groq approval/privacy](docs/sqlpilot_groq_setup.md) |
 | ExperimentLab | [Design, statistics and reproduction](docs/experimentlab.md) · [HTML report](docs/experimentlab_report.html) |
 | Earlier engineering milestones | [Archived comprehensive development guide](docs/development_history.md)—preserves the prior long README, exploratory citywide work and detailed ETL commands |
@@ -455,12 +489,15 @@ The main code lives in `src/citypulse_ai/`, tests in `tests/`, workflows in
 
 **Experimentation:** Randomized A/B testing · Welch inference · CUPED · Statistical power · MDE · Confidence intervals
 
-**Software engineering:** Docker · Docker Compose · GitHub Actions CI · Regression testing · Safe SQL validation
+**Cloud & delivery:** Google Cloud Run · Cloud Build · Artifact Registry · Terraform IaC · GitHub Actions CI/CD · OIDC / Workload Identity Federation
+
+**Software engineering:** Docker · Docker Compose · Regression testing · Safe SQL validation
 
 ---
 
 **Project:** CityPulse AI — Time-Series Forecasting, Agentic AI & MLOps
 
-**Status:** Three-component v1 implemented, CI-verified and documented. Its scope
-is reproducible research and containerized demonstrations, not public production
-hosting or evidence of a real redistribution intervention.
+**Status:** Three-component v1 implemented and verified, with private XGBoost
+cloud deployment and automatic CI/CD. The six-model benchmark, SQLPilot live
+evaluation and synthetic ExperimentLab results have distinct evidence boundaries;
+no public production traffic or real redistribution intervention is claimed.
