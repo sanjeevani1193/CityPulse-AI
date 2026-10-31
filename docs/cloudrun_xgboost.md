@@ -1,11 +1,77 @@
 # Authenticated XGBoost-only Cloud Run deployment
 
-**Phase 2: implementation and read-only planning only. Not deployed.**
-No API was enabled, build submitted, image pushed or Terraform apply executed.
-No service URL exists yet. The six-model `api.station_app` and its original
-Dockerfiles/Compose remain unchanged. XGBoost is the intentional first deployed
-candidate (best recorded six-way held-out MAE); there is no retraining or test
-benchmark rerun in this task.
+**Phase 3: initial authenticated deployment verified on October 31, 2026.**
+One Cloud Build job succeeded, then the approved immutable image was deployed
+with Terraform. The six-model `api.station_app` and its original Dockerfiles/
+Compose remain unchanged. Only XGBoost is deployed, intentionally selected as the
+best recorded six-way held-out MAE candidate. No retraining or held-out benchmark
+rerun occurred. Phase 2 preparation details remain below as historical context.
+
+## Verified initial deployment
+
+- Service: `citypulse-xgboost`, project `citypulse-ai-511315`, `europe-west3`.
+- URL: **https://citypulse-xgboost-lw3wuexzqq-ey.a.run.app** — authenticated only;
+  opening it anonymously is expected to fail, not a broken public demo.
+- Ready revision: `citypulse-xgboost-00001-kcf`; source commit `d4586b0`.
+- One successful [Cloud Build job](https://console.cloud.google.com/cloud-build/builds;region=europe-west3/8988d406-6dc4-4987-820c-fba775e65b77?project=64394592274).
+- Private image: `europe-west3-docker.pkg.dev/citypulse-ai-511315/citypulse-forecasting/xgboost`.
+- Immutable digest: `sha256:987ce3f5704488ccbcb15b8068fd032755151455a4e61207b4c026b17485003c`.
+- Registry-reported image size: **218,131,848 bytes (208.03 MiB)**; one version,
+  one immutable tag `d4586b0-initial`. This is registry storage size, not measured
+  runtime RAM or an uncompressed local Docker image size.
+
+Terraform applied **9 bootstrap additions**, then **2 deployment additions**;
+there were no replacements, modifications to existing managed resources or
+deletions. A fresh post-deployment plan reports **no changes**. The actual
+revision confirms first-generation execution, request-based billing, 0.5 vCPU,
+512 MiB, concurrency 1, min 0/max 1 and startup CPU boost off. Invoker IAM is
+required, with only the named operator granted `roles/run.invoker`. The runtime
+identity has no project roles. Existing project and registry policies have no
+public principals.
+
+| Real cloud check | Result |
+| --- | --- |
+| Anonymous `/health` | 403, expected |
+| Authenticated `/health` | 200, model ready |
+| `/stations` | 200, exact 100 frozen IDs |
+| `/models` | 200, only XGBoost ready, expected model checksum/version |
+| `/predict` | 200, 24 finite nonnegative forecasts with correct UTC/local grid |
+| Saved validation parity | Max absolute error **0**, checked at rtol 1e-5 / atol 1e-4 |
+| Three identical prediction requests | Identical responses; **0.685 / 0.491 / 0.321 seconds** client round trip |
+| Future observations / undeployed model | Both 422 |
+| Final revision image | Exact digest matches the successful private registry push |
+| Reviewed service logs | 27 entries, zero ERROR-or-higher entries |
+
+Service creation to Ready was **25.88 seconds**. From the logged instance start
+through successful startup HTTP probe was **10.30 seconds**; the probe succeeded
+on its second normal startup check. The first authenticated health request after
+deployment took **0.094 seconds**. These are one-deployment observations, not a
+load test, cold-request benchmark, availability SLO or worst-case memory bound.
+A read-only revision lookup initially omitted Google's revision suffix; it was
+corrected using the returned revision name. No rebuild or redeployment occurred.
+
+Protected VM, disk and WIF JSON snapshots matched exactly before/after. The
+existing bucket's location, private/public-prevention and other checked settings
+were preserved. Its only approved changes were the additive prefix-scoped
+builder read grant and one new private staged source object; existing bindings
+and historical/model objects were not removed or overwritten.
+
+Private verification evidence is under ignored
+`outputs/cloudrun-xgboost/phase3/`: HTTP results, build/registry metadata,
+plans/apply records, logs, snapshots and `deployment-summary.json`. Terraform
+state and `deployment.auto.tfvars.json` are local, ignored, owner-only readable;
+a private state backup was byte/hash verified. Do not commit or upload these
+files as public release artifacts. No CD has been implemented.
+
+Observed build duration was **75.22 seconds**: estimated build list cost
+**$0.00376** at the published $0.003/minute e2-medium rate, before allowances,
+credits, ancillary storage/logging/network or currency conversion. This is not an
+actual invoice or updated Free Trial credit balance. Cloud Run verification used
+eight authenticated HTTP requests plus one expected anonymous rejection, with no
+load generator. This deployment did not configure a spend cap. The Budget API
+remains disabled, so existing account-specific budget/cap status was not verified
+through the CLI; inspect Billing Console if a cap is desired. Scaling limits,
+alerts and Free Trial credit are not hard spending guarantees.
 
 ## Exactly three artifacts
 
@@ -42,8 +108,8 @@ No PyTorch, TensorFlow, scikit-learn, GPU libraries or cloud SDK are installed.
 **PyArrow is necessary:** existing shared label/history imports reach
 `etl.history_catalog`; retaining it avoids refactoring the completed pipeline.
 The build must restore the booster successfully before finishing. UID 10001 runs
-the API and cannot write the baked artifacts. Image size is unmeasured until
-Phase 3; configuration inspection is not a container-build claim.
+the API and cannot write the baked artifacts. The deployed image size is recorded above. The earlier Phase 2 checks alone
+were configuration inspection, not a container-build claim.
 
 Prepare a create-only, small, ignored source context locally (no network):
 
@@ -93,8 +159,8 @@ The service configuration is request-based (`cpu_idle=true`), **0.5 vCPU / 512 M
 first-generation execution, concurrency **1**, min **0** / max **1** at service
 and revision level, startup CPU boost off, 60-second request timeout and an HTTP
 startup readiness probe. Fractional CPU requires first-generation execution,
-request-based billing and concurrency 1. These are initial settings, not a
-measured Cloud Run capacity guarantee. Rollout can briefly exceed an instance
+request-based billing and concurrency 1. These settings passed the initial cloud smoke test; this is not a
+worst-case capacity guarantee. Rollout can briefly exceed an instance
 limit; max 1 is not a spending cap. Ingress allows external requests but **IAM
 requires authentication**; it is not anonymous public access.
 
@@ -128,13 +194,15 @@ framework imports deliberately unavailable, no Torch/TensorFlow/sklearn loaded.
 Observed native smoke time was 0.64 s and max process RSS 186,400,768 bytes
 (~178 MiB), **not deployed HTTP latency or a container memory measurement**.
 The pinned base manifest includes linux/amd64; only public manifest metadata was
-read. No local Docker build/container was started. The existing TestClient emits
+read. No local Docker build/container was started; the subsequent approved build ran in Cloud Build. The existing TestClient emits
 a Starlette/httpx deprecation warning; no dependency/environment change was made
 to hide it.
 
-## Phase 3 — separate approval required
+## Deployment procedure and approval gates
 
-These are future operations, **not executed in Phase 2**:
+This procedure was completed once for the initial deployment above. It was not
+executed during Phase 2. Do not repeat builds/applies or change billing/public
+access without approval; future updates still require reviewed plans:
 
 1. Reconfirm Free Trial/credits and approve a small gross trial-credit budget
    (suggest $1 for this pilot; an estimate, not a hard cap). Never upgrade billing.
@@ -159,8 +227,8 @@ gcloud builds submit "$CONTEXT" --config="$CONTEXT/cloudbuild.yaml" \
 ```
 
 The config uses the dedicated builder, `--platform=linux/amd64`, one e2-medium
-worker, Cloud Logging only and a **900-second build timeout**. No build or push
-has been performed. Record the pushed digest and inspect actual image size/build
+worker, Cloud Logging only and a **900-second build timeout**. The initial build/push completed once as recorded above; do not repeat it
+without approval. Record the pushed digest and inspect actual image size/build
 cost. A library/architecture or resource failure stops the pilot; do not retry
 repeatedly or add heavy dependencies automatically.
 
@@ -221,7 +289,8 @@ the build configuration. This extends ordinary tests, not deployment automation.
 Its push/PR triggers remain unchanged. The new tests use synthetic fixtures and
 controlled inference doubles, not packaged weights or real cloud resources.
 Terraform apply, GCP API enablement and Cloud Build submission are never invoked
-by this CI change. Linux image build/deployed checks remain Phase 3 work.
+by this CI change. Linux image build/deployed checks subsequently passed once in Phase 3 above;
+ordinary CI still performs no deployment.
 
 The preservation check before committing reran 133 lightweight ETL, forecasting
 preparation/baseline, causal XGBoost feature and API tests (one actual-training

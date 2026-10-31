@@ -330,11 +330,12 @@ Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjee
 
 ## Reproducing the project
 
-**Cloud deployment preparation (not deployed):** a separate XGBoost-only Cloud Run
-entrypoint, lightweight amd64 image and local-state Terraform are prepared. The
-six-model system remains intact. See [implementation, plans, costs and approval
-gates](docs/cloudrun_xgboost.md). No cloud APIs/builds/deployment were enabled
-during preparation; authenticated deployment requires a separately approved Phase 3.
+**Initial cloud deployment verified:** the XGBoost-only FastAPI service is running
+on authenticated Cloud Run in Frankfurt, deployed through one amd64 Cloud Build
+and local-state Terraform. It returned 24 forecasts with exact saved-validation
+parity. The six-model application remains intact; other methods are not deployed
+in this pilot. [Service URL, verification, costs and management guide](docs/cloudrun_xgboost.md).
+Anonymous invocation is denied; no public portfolio endpoint or CD is enabled.
 
 ```bash
 git clone https://github.com/sanjeevani1193/CityPulse-AI.git
