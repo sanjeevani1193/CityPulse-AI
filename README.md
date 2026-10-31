@@ -335,10 +335,11 @@ on authenticated Cloud Run in Frankfurt, deployed through one amd64 Cloud Build
 and local-state Terraform. It returned 24 forecasts with exact saved-validation
 parity. The six-model application remains intact; other methods are not deployed
 in this pilot. [Service URL, verification, costs and management guide](docs/cloudrun_xgboost.md).
-Anonymous invocation is denied; no public portfolio endpoint or automatic CD is enabled.
+Anonymous invocation is denied; there is no public portfolio endpoint.
 [Manual GitHub Actions CD is verified](docs/cloudrun_cd.md), including secure WIF,
 Cloud Build, an image-only rollout and exact prediction parity. Automatic push
-deployment remains disabled.
+deployment is enabled for relevant main-branch changes after exact-commit CI;
+the controlled automatic verification is pending.
 
 ```bash
 git clone https://github.com/sanjeevani1193/CityPulse-AI.git

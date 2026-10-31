@@ -94,11 +94,13 @@ def test_restoration_generation_and_checksum_fail_closed(tmp_path,monkeypatch):
     with pytest.raises(ValueError,match='generation'):cd.restore(tmp_path/'second',client)
 
 
-def test_workflow_trust_disabled_automation_and_sanitized_outputs():
+def test_workflow_trusted_main_push_or_manual_and_sanitized_outputs():
     workflow=yaml.safe_load(Path('.github/workflows/cloudrun-cd.yml').read_text())
     assert workflow['on']['push']['branches']==['main']
+    assert set(workflow['on'])=={'push','workflow_dispatch'}
+    assert all(not path.startswith(('docs/', 'README', 'src/citypulse_ai/sqlpilot/', 'src/citypulse_ai/experiments/')) for path in workflow['on']['push']['paths'])
     assert workflow['concurrency']['cancel-in-progress'] is False
-    assert workflow['jobs']['ci-gate']['if'] == "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'"
+    assert workflow['jobs']['ci-gate']['if'] == "github.ref == 'refs/heads/main' && (github.event_name == 'workflow_dispatch' || github.event_name == 'push')"
     assert workflow['jobs']['deploy']['needs']=='ci-gate'
     assert workflow['jobs']['deploy']['permissions']=={'contents':'read','id-token':'write'}
     assert 'id-token' not in workflow['jobs']['ci-gate'].get('permissions',{})

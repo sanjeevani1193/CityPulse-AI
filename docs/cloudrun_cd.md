@@ -12,7 +12,8 @@ Both approved private validation JSON files were uploaded create-only and their
 generation-pinned bytes were verified. The manifest records request generation
 `1793459483219844` and reference generation `1793459483478652`.
 The one manual GitHub Actions deployment passed. Automatic push deployment
-remains disabled in code. [Initial deployment and cleanup](cloudrun_xgboost.md).
+was disabled for that manual run. Automatic deployment is now enabled for
+relevant main pushes; its controlled verification is pending. [Initial deployment and cleanup](cloudrun_xgboost.md).
 
 ## Verified manual run — October 31, 2026
 
@@ -57,9 +58,9 @@ and ancillary charges. This is not an actual invoice or updated trial balance.
 The run made six authenticated requests plus one anonymous denial. Registry,
 source storage and logging continue to have retention costs; none were pruned.
 
-Manual CD is verified. **Automatic CD is still disabled**. Enabling it requires
-separate approval, a reviewed main-push job condition and one approved relevant
-push to verify that path. Do not dispatch another build merely for these docs.
+Manual CD is verified. Automatic main-push deployment has now been approved
+and enabled; the one controlled push verification is pending. Documentation-only
+changes do not trigger deployment.
 
 ## Small deployment path
 
@@ -78,10 +79,10 @@ all historical resources are untouched.
 ### Trigger and CI rules
 
 `.github/workflows/cloudrun-cd.yml` supports `workflow_dispatch` from main.
-The initial job condition permits **workflow_dispatch only**; pushes cannot
-reach the cloud job, regardless of repository variables. Enabling automatic
-deployment requires a separately reviewed workflow-condition change after the
-manual run passes. Push path filters cover the packaged Python directories, XGBoost Docker/
+The job condition permits only **push or workflow_dispatch on main**. Pull
+requests and other branches cannot reach the cloud job. There is one push
+trigger, not a second workflow_run deployment trigger; this avoids duplicate
+deployments from the same CI event. Push path filters cover the packaged Python directories, XGBoost Docker/
 build configuration, frozen input manifest, CD script and workflow; docs-only
 changes do not build. Because the existing packager includes shared forecasting
 modules, changes to those packaged modules also count as relevant.
@@ -214,10 +215,10 @@ there is no automatic rebuild or rollback. Inspect and request approval before
 another billable attempt. Finally run a fresh local Terraform plan to confirm
 no unintended infrastructure drift.
 
-After successful verification, keep the manual-only condition until a separate
-automatic-CD approval. Enabling push deployment requires a reviewed condition
-change and one subsequent relevant main-branch change to verify it; neither is
-part of this manual run.
+Automatic deployment was separately approved after the successful manual run.
+The controlled push changes only a serving-code comment alongside the trigger,
+regression assertion and documentation. It does not change model behavior,
+configuration, artifacts, API contracts, IAM or Terraform.
 
 ## Costs and limits
 

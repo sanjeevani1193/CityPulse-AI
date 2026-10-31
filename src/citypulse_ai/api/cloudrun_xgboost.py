@@ -1,4 +1,5 @@
 """XGBoost-only deployment; original six-model station_app is unchanged."""
+# Deployment smoke changes must preserve the frozen station100 inference contract.
 from contextlib import asynccontextmanager
 import logging
 import os
