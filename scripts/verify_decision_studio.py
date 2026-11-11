@@ -22,7 +22,7 @@ async def render(port):
     theme_verified = False
     async with connect(f"ws://127.0.0.1:{port}/_stcore/stream",
                        origin=f"http://127.0.0.1:{port}", subprotocols=["streamlit"]) as ws:
-        async def rerun(widget_id=None, workspace="Model Comparison"):
+        async def rerun(widget_id=None, workspace="Model Comparison", trigger=None):
             nonlocal theme_verified
             request = BackMsg()
             request.rerun_script.query_string = ""
@@ -31,6 +31,10 @@ async def render(port):
                 widget.id = widget_id
                 # Streamlit 1.66 radio widgets serialize formatted string values.
                 widget.string_value = workspace
+            if trigger:
+                button = request.rerun_script.widget_states.widgets.add()
+                button.id = trigger
+                button.trigger_value = True
             await ws.send(request.SerializeToString())
             elements = []
             for _ in range(200):
@@ -67,10 +71,19 @@ async def render(port):
         actual = next(trace for trace in figures[0]["data"] if trace["name"] == "Actual recorded starts")
         assert len(actual["x"]) == len(set(actual["x"])) == 24
         assert any(trace.get("fill") == "tonexty" for trace in figures[0]["data"])
+        sql_page = await rerun(navigation, "SQLPilot")
+        assert any(e.HasField("heading") and e.heading.body == "SQLPilot" for e in sql_page)
+        run_button = next(e.button.id for e in sql_page if e.HasField("button") and e.button.label == "Run approved SQL")
+        executed = await rerun(navigation, "SQLPilot", trigger=run_button)
+        import pyarrow as pa
+        results = [pa.ipc.open_stream(e.dataframe.arrow_data.data).read_all().to_pylist()
+                   for e in executed if e.HasField("dataframe")]
+        assert any(result == [{"starts": 1998}] for result in results)
         assert theme_verified
         return {"overview_rendered": True, "model_comparison_rendered": True,
                 "forecast_explorer_rendered": True, "saved_forecast_points": 24,
                 "tft_band_rendered": True, "plotly_charts_per_comparison_workspace": 2,
+                "sqlpilot_rendered": True, "real_curated_sql_starts": 1998,
                 "native_light_dark_theme_config_verified": True}
 
 

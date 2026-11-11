@@ -271,7 +271,7 @@ def test_streamlit_completed_workspaces_and_interactions():
     assert not app.exception and any("Select at least one" in w.value for w in app.warning)
 
 
-@pytest.mark.parametrize("workspace", ["SQLPilot", "ExperimentLab & Methodology"])
+@pytest.mark.parametrize("workspace", ["ExperimentLab & Methodology"])
 def test_unimplemented_workspaces_are_explicit(workspace):
     app = AppTest.from_file(str(ENTRY), default_timeout=25).run()
     app.sidebar.radio[0].set_value(workspace).run()

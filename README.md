@@ -372,9 +372,9 @@ Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjee
 ## Reproducing the project
 
 **Offline Decision Studio (in development):** a separate Streamlit + Plotly app
-now presents Overview, historical Forecast Explorer and Model Comparison from
-verified, precomputed artifacts. It requires no GCP credentials or trained-model
-runtime. SQLPilot and ExperimentLab interactive workspaces are marked upcoming; public
+now presents Overview, historical Forecast Explorer, Model Comparison and
+curated SQLPilot queries against a verified local sample. It requires no GCP
+credentials, LLM key or trained-model runtime. ExperimentLab's interactive workspace is upcoming; public
 hosting is not yet verified. See [local setup, provenance and scope](docs/decision_studio.md).
 
 **Private cloud API:** XGBoost is deployed on authenticated Cloud Run in Frankfurt;

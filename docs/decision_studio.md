@@ -1,13 +1,14 @@
-# CityPulse Decision Studio - offline presentation, Milestones 2 and 3
+# CityPulse Decision Studio - offline presentation, Milestones 2-4
 
 This is a separate Streamlit + Plotly presentation of **saved** CityPulse results.
-Overview, Forecast Explorer and Model Comparison are implemented. SQLPilot and
-ExperimentLab & Methodology are visibly labelled upcoming, not functional pages.
-It is not publicly hosted yet and does not perform live forecasts, SQL execution,
-LLM calls or statistical experiments. GCP backup/retirement is a separate task.
+Overview, Forecast Explorer, Model Comparison and curated SQLPilot are implemented.
+ExperimentLab & Methodology is visibly labelled upcoming, not a functional page.
+It is not publicly hosted yet and does not perform live forecasts, LLM calls or
+statistical experiments. SQLPilot executes only fixed local reference queries.
+GCP backup/retirement is a separate task.
 
-The existing six-model API, models, SQLPilot, ExperimentLab, Terraform and cloud
-workflows are unchanged. No GCP credentials, cloud SDK, PyTorch or TensorFlow are
+The existing six-model API, models, original SQLPilot, ExperimentLab, Terraform and
+cloud workflows are unchanged. No GCP credentials, cloud SDK, PyTorch or TensorFlow are
 needed by this app. No artifact downloads occur at startup.
 
 ## Run locally
@@ -15,7 +16,7 @@ needed by this app. No artifact downloads occur at startup.
 Use Python 3.14 (the locally tested interpreter); use the same version for later
 Community Cloud deployment. Dependencies live beside the app entrypoint to avoid
 installing the repository's forecasting extras. The runtime requires only the
-four packages in `apps/decision_studio/requirements.txt` and their dependencies.
+six packages in `apps/decision_studio/requirements.txt` and their dependencies.
 
 ```sh
 python3 -m venv .venv-decision-studio
@@ -44,6 +45,8 @@ and their environments alone. This environment is local and gitignored.
 | `charts.py` | Plotly figures; receives validated saved summaries, not model objects |
 | `ui.py`, `workspaces.py`, `app.py` | Shared presentation, routing, overview/comparison and explicit upcoming pages |
 | `forecasts.py`, `explorer.py` | Exact saved sequence selection, descriptive errors and Forecast Explorer UI |
+| `sql_demo.py`, `sql_demo_worker.py`, `sql_workspace.py` | Fixed query IDs, bounded read-only worker and curated SQL UI |
+| `sql_export.py`, `scripts/build_sqlpilot_demo.py` | Create-only projection of the actual analytical sample and reference verification |
 | `apps/decision_studio/data/` | Small, public-safe aggregate results, sample sequences and provenance |
 | `tests/test_decision_studio.py` | Artifact, mathematics, DST, exact-source-row and Streamlit tests |
 | `scripts/verify_decision_studio.py` | Real loopback HTTP and WebSocket render check; terminates its own process |
@@ -318,3 +321,178 @@ The final test run sampled about 226 MiB owned peak RSS; the smoke check recorde
 about 173 MiB server peak RSS. Existing host memory pressure remained warning-level,
 but the monitored runs stayed within unchanged resource guards. No browser
 automation was launched for this milestone.
+
+## Milestone 4: curated offline SQLPilot
+
+SQLPilot now executes **genuine local read-only SQL** against a projection of the
+existing analytical sample. It does not call Groq, run LangGraph/MCP transport,
+accept free-form SQL/questions, or connect to GCP. The original agent remains
+unchanged and is explained separately in the workspace.
+
+Install the two newly required, existing SQLPilot-pinned dependencies in the
+isolated environment, then restart the app using the normal command above:
+
+```sh
+.venv-decision-studio/bin/python -m pip install --only-binary=:all: \
+  -r apps/decision_studio/requirements.txt
+```
+
+No model or cloud SDK is installed. DuckDB 1.5.6 is pinned because the existing
+native AST validator deliberately fails closed on unknown parser versions.
+`pytz` supports DuckDB's timezone-aware Python retrieval.
+
+### Actual sample and verified export
+
+The original source is
+`outputs/historical/samples/2024-01-n1000/citypulse.duckdb`, not the station100
+forecasting dataset. Its ETL report records the first 1,000 rows from each of two
+January 2024 archive members: 2,000 sampled rows, 1,998 accepted, 2 rejected for
+missing start stations, and 1,931 sparse station-hour aggregates. Source archive
+months are not exact NYC-local periods: the sample's UTC starts range from
+2024-01-01 04:57:44.743 to 2024-02-01 04:35:58.275, corresponding to December 31
+through January 31 in NYC. It does not establish complete monthly totals,
+physical rental demand, publisher completeness, station availability or genuine
+zero counts for absent hours.
+
+`sql_export.py` creates a **new** physical database containing only:
+
+- `hourly_rides`: `start_station_id VARCHAR`, `hour_start TIMESTAMPTZ`,
+  `ride_count BIGINT` (1,931 rows).
+- `validated_trips`: `started_at/ended_at TIMESTAMPTZ`,
+  `start_station_id/end_station_id VARCHAR`, `duration_seconds DOUBLE` (1,998 rows).
+
+Every projected value/type matches the original database. Ride IDs, source paths,
+source row numbers, UTC-nanosecond helper columns and the unrelated February view
+are excluded. The original database and report are not overwritten. The manifest
+records their hashes, projected schema/counts, original CSV member names/hashes,
+transformation, and output hashes. It links to retained source evidence; this
+milestone does not re-ingest CSVs or independently establish publisher completeness.
+
+Files under `apps/decision_studio/sqlpilot_data/` are `sample.duckdb`,
+`queries.json`, `evaluation.json`, and `manifest.json`. They are independent of
+the unchanged forecast bundle. Only the exact small projected database is exempted
+from `.gitignore`; arbitrary DuckDB databases remain ignored.
+
+```sh
+# Optional reproduction with existing local research inputs only. Create-only:
+# use a NEW destination; never restore/download sources automatically.
+PYTHONPATH=src .venv-decision-studio/bin/python scripts/build_sqlpilot_demo.py \
+  --output /path/to/new-sql-demo
+```
+
+DuckDB physical file encodings may differ across rebuilds; correctness means
+exact projected values/schema and matching query results, not promised
+byte-identical reconstructed databases. The shipped files are checksum verified.
+
+### Fixed SQL and real results
+
+The six reference queries exactly match the existing frozen question fixture.
+Its `fixture_expected_rows` belong to a **synthetic test fixture** and are never
+used as real-sample answers. The exporter ran each query on the original read-only
+sample and the projected sample, comparing columns and rows (tight tolerance for
+floating results). The public worker compares fresh outputs against those newly
+verified references too.
+
+| ID | Real analytical-sample result |
+|---|---|
+| `total` | 1,998 accepted sampled starts |
+| `top_station` | Exact station ID `5779.11`, 54 sampled starts; deterministic ID tie-break |
+| `duration` | Mean duration 692.6897217217227 seconds |
+| `weekday` | Sunday=0: `0:170, 1:305, 2:280, 3:368, 4:312, 5:301, 6:262`; total 1,998 |
+| `station_filter` | `NULL`, because exact ID `001` has no matching hourly rows; not converted to zero |
+| `join` | 1,998 accepted sampled trips match exact start station and UTC start hour |
+
+The selector shows the corresponding question and **curated reference SQL**.
+Pressing Run executes it; there is no background generation. Source definitions
+and all six exact queries are in `decision_studio/sql_demo.py`. For example:
+
+```sql
+SELECT sum(ride_count) AS starts FROM hourly_rides
+```
+
+returns `[[1998]]`. The weekday query explicitly converts `hour_start` to
+`America/New_York` before `date_part('dow', ...)`. Bar charts show true weekday
+counts/top-station results, without extrapolating a citywide ranking. Stale
+results disappear when another question is selected. Empty rows, SQL NULL and
+execution errors have distinct messages and no invented fallback answers.
+
+### Runtime safety and architecture
+
+Public path: **approved query ID -> fixed SQL -> original AST policy -> isolated
+read-only DuckDB worker -> checked structured result**. No anonymous SQL editor,
+file-path picker, upload or LLM credential is exposed. The fixed ID registry
+rejects unknown IDs and query changes even if someone manually re-signs a local
+query manifest. Local bundle checksums detect corruption; they are not signatures.
+The reviewed Git checkout/database are trusted inputs, not arbitrary visitor files.
+
+`sql_demo_worker.py` reuses `citypulse_ai.sqlpilot.core.worker`: single SELECT,
+physical-table/column/function allowlists, no external access/extensions, readonly
+connection, 64 MB engine memory, one thread, no spill, 100 output rows and 128 KiB
+response cap. A parent wall timeout and worker alarm bound execution to five
+seconds; interrupted/timed-out children are killed and reaped, without retries.
+The worker resolves the fixed project source path itself and receives a minimal
+nonsecret environment. It works without an editable package install or inherited
+`PYTHONPATH`. Engine memory is not total RSS; native-engine vulnerabilities remain
+outside these application-layer guardrails.
+
+Original agent path: **question -> LangGraph -> hosted LLM -> MCP tools -> guarded
+DuckDB -> grounded explanation**, with return/correction edges. The code remains
+under `src/citypulse_ai/sqlpilot/`:
+
+- `graph.py` defines state and conditional routing: discover schema, generate SQL
+  or clarify, execute, one correction if appropriate, then explain or fail. Normal
+  Python could implement this; the graph makes state, budgets and branches explicit.
+  No persistent graph checkpointing is claimed by this demonstration.
+- `providers.py` sends approved question/schema to Groq and parses candidate SQL
+  or clarification. It does not execute SQL or send returned query rows.
+- `client.py` uses the official MCP SDK to initialize the local stdio server,
+  list named tools and invoke `sqlpilot_schema`/`sqlpilot_query` over JSON-RPC.
+  `mcp_server.py` implements the bounded local server/tool subset. MCP standardizes
+  tool communication; it is neither the LLM nor the security policy by itself.
+- `core.py` validates and executes, using the same restrictions as this demo.
+  The original graph permits at most two generation attempts and three tool calls.
+
+The original live report is preserved semantically in `evaluation.json`, with its
+source hash recorded. It reports 6/9 correct outcomes, 4/6 correct answerable
+results, 5/6 successful answerable executions and median latency 1.946334041 s.
+The incorrect top-station result, failed weekday queries and missed clarification
+are shown as recorded. Exact generated SQL/results were not saved, so their
+precise causes cannot be reconstructed. These new curated outputs must never be
+labelled Groq generations, repaired original traces or improved live accuracy.
+
+Offline execution makes the public app inspectable, reproducible and usable
+without paid APIs, keys, model weights or GCP. It demonstrates the safe execution
+substrate; it is not new natural-language-to-SQL accuracy evidence.
+
+### Local verification
+
+```sh
+PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-decision-studio/bin/python -m pytest tests/test_decision_studio.py \
+  tests/test_decision_studio_explorer.py tests/test_decision_studio_sql.py \
+  tests/test_sqlpilot.py -q
+.venv-decision-studio/bin/python scripts/verify_decision_studio.py
+```
+
+The original-source projection/rebuild check explicitly skips with a reason if
+retained local research inputs are unavailable; it never downloads them. Other
+SQL checks use the small public bundle. Synthetic corruptions/test doubles verify
+failure handling only and are not presented as real or live LLM results.
+
+Milestone 4 measured verification: **155 tests passed, zero failures/skips** across
+Decision Studio, Forecast Explorer, curated SQLPilot and the existing SQLPilot
+core (41.45 seconds). The pre-implementation Explorer regression also passed all
+26 checks. Six real curated worker queries matched the original-sample references;
+source projection, readonly rejection, external-access blocking, NULL/empty/error
+handling, timeout cleanup, stale selection, malformed bundles and all four
+implemented workspaces were tested. No genuine LLM evaluation was repeated.
+
+The final real HTTP/WebSocket check returned 200 for root/health, rendered all
+four workspaces, clicked the SQL button and decoded its actual Arrow result
+`[{"starts":1998}]`. The owned server stopped cleanly. Its peak RSS was about
+173 MiB; the final test run sampled about 332 MiB owned peak RSS. Runs stayed
+within existing guards despite warning-level host memory pressure. No browser
+automation was attempted; the new SQLPilot browser UI review and public hosting
+remain pending. Dependency compatibility, source/output hashes, syntax, local
+Markdown links and whitespace checks passed. All changes remain uncommitted for
+visual review on `feature/citypulse-decision-studio`.
