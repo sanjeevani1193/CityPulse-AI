@@ -201,7 +201,7 @@ def load_bundle(directory=DEFAULT_BUNDLE):
         if subset_stations != manifest["subset"]["station_ids"] or not set(subset_stations) <= set(data["station_ids"]):
             raise ArtifactError("Subset station identity differs")
         validate_diagnostics(diagnostics, data)
-        return {"manifest": manifest, "benchmark": data, "diagnostics": diagnostics}
+        return {"manifest": manifest, "benchmark": data, "diagnostics": diagnostics, "forecasts": rows}
     except (OSError, KeyError, TypeError, ValueError) as error:
         if isinstance(error, ArtifactError):
             raise

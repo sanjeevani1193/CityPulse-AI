@@ -1,7 +1,7 @@
-# CityPulse Decision Studio — offline presentation, Milestone 2
+# CityPulse Decision Studio - offline presentation, Milestones 2 and 3
 
 This is a separate Streamlit + Plotly presentation of **saved** CityPulse results.
-Overview and Model Comparison are implemented. Forecast Explorer, SQLPilot and
+Overview, Forecast Explorer and Model Comparison are implemented. SQLPilot and
 ExperimentLab & Methodology are visibly labelled upcoming, not functional pages.
 It is not publicly hosted yet and does not perform live forecasts, SQL execution,
 LLM calls or statistical experiments. GCP backup/retirement is a separate task.
@@ -42,7 +42,8 @@ and their environments alone. This environment is local and gitignored.
 | `artifacts.py` | Fixed filenames, version/schema/hash checks, exact elapsed-hour sequence validation; fail closed |
 | `metrics.py` | Paired error formulas, baseline-relative improvement, selected-model rankings |
 | `charts.py` | Plotly figures; receives validated saved summaries, not model objects |
-| `ui.py`, `workspaces.py`, `app.py` | Shared presentation, two completed workspaces and explicit upcoming pages |
+| `ui.py`, `workspaces.py`, `app.py` | Shared presentation, routing, overview/comparison and explicit upcoming pages |
+| `forecasts.py`, `explorer.py` | Exact saved sequence selection, descriptive errors and Forecast Explorer UI |
 | `apps/decision_studio/data/` | Small, public-safe aggregate results, sample sequences and provenance |
 | `tests/test_decision_studio.py` | Artifact, mathematics, DST, exact-source-row and Streamlit tests |
 | `scripts/verify_decision_studio.py` | Real loopback HTTP and WebSocket render check; terminates its own process |
@@ -88,7 +89,7 @@ zero-based ranks `[0,16,33,34,50,66,67,83,99]` across the existing lower/middle/
 activity strata, and origins October 1, November 2 and December 1, 2025. This yields
 9 stations × 3 dates × 24 elapsed hours = **648 target rows / 27 complete windows**.
 These are illustrative strata/month examples, not a statistically representative
-replacement for the evaluation cohort. Forecast Explorer remains unimplemented.
+replacement for the evaluation cohort. Forecast Explorer displays only these windows.
 
 The November 2 sequence preserves both 01:00 offsets and ends at 22:00 EST. It
 does not fabricate a 25th prediction or fill the unscored 23:00 bucket. Station IDs,
@@ -214,10 +215,12 @@ their resource guards; host memory pressure remained warning-level.
 
 After pulling theme changes, stop your existing local Streamlit process with
 Ctrl-C and restart it using the command above. No Mac/browser restart is needed.
-Review Overview and Model Comparison before moving to Forecast Explorer.
+The approved Milestone 2 foundation was committed locally as
+`8763cc97794918b4170dd79b06527a704c77eb8b`. Milestone 3 implementation is saved
+locally; its browser UI review remains pending.
 
-After review, Milestone 3 can implement Forecast Explorer using the prepared
-sequences. SQLPilot later needs **newly executed, labelled offline examples**:
+Milestone 3 implements Forecast Explorer using the prepared sequences, as
+described below. SQLPilot later needs **newly executed, labelled offline examples**:
 its original live report has statuses but no saved generated SQL/results. Never
 invent those traces or substitute synthetic fixture answers for real sample data.
 ExperimentLab's later workspace will reuse saved synthetic results and caveats.
@@ -226,3 +229,92 @@ No deployment workflow was edited. No push/merge is part of this milestone. New
 Decision Studio files are outside the existing Cloud Run deployment path filters;
 do not modify old forecasting/feature/API paths merely to build presentation code.
 Public hosting, any workflow changes and GCP retirement require separate review.
+
+## Milestone 3: historical Forecast Explorer
+
+**Status: implemented and automatically tested; browser UI review is pending.**
+Real HTTP/WebSocket checks passed, but they do not replace visual inspection of
+the rendered Forecast Explorer. Review the browser UI before further development.
+
+Select an exact station ID (nine available), then an available NYC-midnight
+forecast origin (three per station). The widget stores the **UTC ISO origin**;
+formatting it in NYC time does not change the key. Select any of the six methods,
+switch timestamp labels between NYC offsets and UTC, and optionally display the
+saved TFT q10-q90 band. Empty method selection displays actuals only, with a
+warning and no fabricated model scores. SQLPilot/ExperimentLab remain placeholders.
+
+`load_bundle()` verifies the same unchanged four-file bundle and returns its
+already-validated forecast rows. `available_origins()` and `select_sequence()`
+filter exact station/origin identities, order horizons 1-24 and require exactly
+one complete trusted sequence. Unknown stations/origins, missing/duplicate hours,
+untrusted counts and invalid predictions fail closed. There is no interpolation,
+zero-filling, training, new prediction generation or new test-set inference.
+
+For example, on November 2, 2025:
+
+```text
+origin UTC: 2025-11-02T04:00:00Z = 00:00 EDT
+horizon 2: 2025-11-02T05:00:00Z = 01:00-04:00 (EDT)
+horizon 3: 2025-11-02T06:00:00Z = 01:00-05:00 (EST)
+horizon 24: 2025-11-03T03:00:00Z = 22:00-05:00 (EST)
+```
+
+The chart plots UTC instants on a date axis; explicit labels and tooltips show NYC
+offsets or UTC instead of the viewer's browser timezone. Tooltips include horizon,
+actual, prediction and signed error. Lower/upper TFT traces form the shaded band;
+q50 is the TFT point forecast. Actuals and methods have distinct colours/styles.
+The expanded table retains every exact UTC/NYC target label and selected values.
+
+`window_errors()` calculates prediction minus trusted actual for each horizon.
+Positive error means overprediction; negative error means underprediction. MAE
+is the mean absolute error over these **24** observations, in starts/hour. The
+table reports mean signed error, counts of over/under/exact predictions and the
+largest absolute miss (earliest horizon wins ties). A horizon plot shows signed
+errors around zero. Large errors describe discrepancies, not their causes.
+
+```python
+from citypulse_ai.decision_studio.artifacts import load_bundle
+from citypulse_ai.decision_studio.forecasts import select_sequence, window_errors
+
+bundle = load_bundle()
+station = bundle["manifest"]["subset"]["station_ids"][0]
+sequence = select_sequence(bundle["forecasts"], station, "2025-11-02T04:00:00Z")
+summary, errors = window_errors(sequence, ["xgboost", "pytorch-tft"])
+# 24 certified actuals per method; official 220,800-target metrics are unchanged.
+```
+
+The quantiles estimate the conditional distribution of accepted recorded starts:
+q10/q50/q90 are the predicted 10th/50th/90th percentiles. The q10-q90 span has
+nominal 80% probability mass **if calibrated**. It is not a confidence interval
+for an estimated mean/parameter, nor a guarantee that 80% of any selected 24
+observations will fall inside. The fixed nonnegative postprocessing is retained.
+
+The app is interactive because widgets select saved data and recompute small
+descriptive summaries; trained models are never loaded. The official full-test
+scores remain separate in Model Comparison. No ranking/generalization claim may
+be inferred from a demonstration window. The 27 windows are not all 9,200 test
+station-origin pairs, and station IDs have no invented names or coordinates.
+
+```sh
+PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-decision-studio/bin/python -m pytest \
+  tests/test_decision_studio.py tests/test_decision_studio_explorer.py -q
+.venv-decision-studio/bin/python scripts/verify_decision_studio.py
+```
+
+The real loopback smoke check now renders all three implemented workspaces,
+checks 24 distinct forecast timestamps and the TFT band, and stops its owned
+server. No heavy browser automation is necessary. Pixel-level visual review and
+public hosting remain separate; no deployment is claimed.
+
+Milestone 3 local verification: **75 tests passed, zero failures/skips** (49
+existing Decision Studio checks plus 26 Explorer checks), in 14.94 seconds.
+Coverage includes all 27 saved windows, invalid/missing selections, malformed
+sequences, signed-error mathematics, DST offsets, quantile ordering, chart data,
+widget interactions and all completed workspaces. The actual HTTP/WebSocket
+smoke check returned 200 for root/health and rendered all three workspaces, with
+24 distinct forecast instants and a TFT band. The owned server stopped cleanly.
+The final test run sampled about 226 MiB owned peak RSS; the smoke check recorded
+about 173 MiB server peak RSS. Existing host memory pressure remained warning-level,
+but the monitored runs stayed within unchanged resource guards. No browser
+automation was launched for this milestone.

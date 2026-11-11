@@ -1,9 +1,10 @@
-"""Five-workspace navigation; only two workspaces implemented in this milestone."""
+"""Five-workspace navigation; three implemented offline workspaces."""
 import streamlit as st
 
 from .artifacts import ArtifactError, load_bundle
 from .ui import configure, sidebar, upcoming
 from .workspaces import comparison, overview
+from .explorer import forecast_explorer
 
 
 def main():
@@ -19,6 +20,8 @@ def main():
         overview(bundle)
     elif workspace == "Model Comparison":
         comparison(bundle)
+    elif workspace == "Forecast Explorer":
+        forecast_explorer(bundle)
     else:
         upcoming(workspace)
 

@@ -22,7 +22,7 @@ async def render(port):
     theme_verified = False
     async with connect(f"ws://127.0.0.1:{port}/_stcore/stream",
                        origin=f"http://127.0.0.1:{port}", subprotocols=["streamlit"]) as ws:
-        async def rerun(widget_id=None):
+        async def rerun(widget_id=None, workspace="Model Comparison"):
             nonlocal theme_verified
             request = BackMsg()
             request.rerun_script.query_string = ""
@@ -30,7 +30,7 @@ async def render(port):
                 widget = request.rerun_script.widget_states.widgets.add()
                 widget.id = widget_id
                 # Streamlit 1.66 radio widgets serialize formatted string values.
-                widget.string_value = "Model Comparison"
+                widget.string_value = workspace
             await ws.send(request.SerializeToString())
             elements = []
             for _ in range(200):
@@ -60,9 +60,18 @@ async def render(port):
         comparison = await rerun(navigation)
         assert any(e.HasField("heading") and e.heading.body == "Model Comparison" for e in comparison)
         assert sum(e.HasField("plotly_chart") for e in comparison) == 2
+        explorer = await rerun(navigation, "Forecast Explorer")
+        assert any(e.HasField("heading") and e.heading.body == "Forecast Explorer" for e in explorer)
+        figures = [json.loads(e.plotly_chart.spec) for e in explorer if e.HasField("plotly_chart")]
+        assert len(figures) == 2
+        actual = next(trace for trace in figures[0]["data"] if trace["name"] == "Actual recorded starts")
+        assert len(actual["x"]) == len(set(actual["x"])) == 24
+        assert any(trace.get("fill") == "tonexty" for trace in figures[0]["data"])
         assert theme_verified
         return {"overview_rendered": True, "model_comparison_rendered": True,
-                "plotly_charts": 2, "native_light_dark_theme_config_verified": True}
+                "forecast_explorer_rendered": True, "saved_forecast_points": 24,
+                "tft_band_rendered": True, "plotly_charts_per_comparison_workspace": 2,
+                "native_light_dark_theme_config_verified": True}
 
 
 def main():

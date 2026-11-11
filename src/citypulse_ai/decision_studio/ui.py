@@ -98,7 +98,7 @@ def sidebar():
         st.markdown("**Saved evidence. No live backend.**")
         st.caption("Historical forecasts · accepted recorded starts · synthetic experimentation")
         st.markdown(f"[Repository]({REPOSITORY}) · [Methodology]({DOCS}six_model_followup_benchmark.md)")
-        st.caption("This milestone: Overview and Model Comparison. Other workspaces are previews only.")
+        st.caption("Explore Overview, Forecast Explorer and Model Comparison. Other workspaces are previews only.")
     return choice
 
 

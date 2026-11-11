@@ -1,4 +1,4 @@
-"""Only Overview and Model Comparison are functional in Milestone 2."""
+"""Overview and Model Comparison; Forecast Explorer lives in explorer.py."""
 import pandas as pd
 import streamlit as st
 
@@ -58,7 +58,7 @@ def overview(bundle):
         st.subheader("Start with the evidence")
         st.write("Use **Model Comparison** in the sidebar to rank methods, compare temporal splits and inspect saved error breakdowns.")
         st.markdown(f"[Repository & reproducibility]({REPOSITORY})  \n[Forecast methodology]({DOCS}final_tft_dataset.md)  \n[Cloud engineering evidence]({DOCS}cloudrun_cd.md)  \n[Synthetic experiment report]({DOCS}experimentlab_report.html)")
-        st.caption("Forecast Explorer, SQLPilot and ExperimentLab interactive workspaces are upcoming.")
+        st.caption("Forecast Explorer shows saved historical windows. SQLPilot and ExperimentLab interactive workspaces are upcoming.")
     provenance(bundle)
 
 
