@@ -1,0 +1,182 @@
+{
+  "evaluation_scope": "frozen_full_test",
+  "exporter_sha256": "8098428d07e49cffea84673dd7aa1723ed2dfbd812d0ae186d8dc71f617add20",
+  "format_version": "citypulse-decision-studio-v1",
+  "outputs": {
+    "benchmark.json": {
+      "sha256": "34c918405eb961d5a42abb6f724d37f5d3f6c8bbeeeeb3028f8e1e75a2078f04",
+      "size_bytes": 4790
+    },
+    "diagnostics.json": {
+      "sha256": "6100b50dd62bafbd4ba49922efd2aac896ff591c345b98077edcf474d3af4d24",
+      "size_bytes": 137503
+    },
+    "forecast_sequences.parquet": {
+      "sha256": "8be5b46c486c4d148f3c6b04c0cc96b60cb8d735d1c5894cd97245f8513b6396",
+      "size_bytes": 53924
+    }
+  },
+  "pyarrow_version": "23.0.1",
+  "source_git_revision": "ff9762570592526a5c2f621ad3cb7546d9126c39",
+  "sources": {
+    "outputs/forecasting-v1/artifacts/preprocessing.json": {
+      "sha256": "f788108df037662b5bbc0739f6f22f105e798e2839bed1e67100cf570b0467fe",
+      "size_bytes": 24894
+    },
+    "outputs/forecasting-v1/diagnostics-final/activity.csv": {
+      "sha256": "c00eaa5c4f10ff02e8e65f04097f1b98d7cf41ac8aef7beffd46fdd7dd3d0cec",
+      "size_bytes": 1067
+    },
+    "outputs/forecasting-v1/diagnostics-final/day_type.csv": {
+      "sha256": "f42f3b6aeebcbd3bd6814a029f751e40bbf70d1d35940841084a232e744084d7",
+      "size_bytes": 745
+    },
+    "outputs/forecasting-v1/diagnostics-final/hour.csv": {
+      "sha256": "5c5fcac76e1efadfb78e146f9808d31c083891ae019cd64b2f985b954830adbb",
+      "size_bytes": 7385
+    },
+    "outputs/forecasting-v1/diagnostics-final/month.csv": {
+      "sha256": "f3c2fdd3043b00b675f0ab207b169acc320ffb0ece6c004bcd9922ac6a758465",
+      "size_bytes": 1090
+    },
+    "outputs/forecasting-v1/diagnostics-final/overall.csv": {
+      "sha256": "9e21089b8c54edbd32ba8080fb979d553de6f74db5db631145ec84c91c02f987",
+      "size_bytes": 575
+    },
+    "outputs/forecasting-v1/diagnostics-final/period.csv": {
+      "sha256": "73dc3da0892edb3502da417151ebbaf9d6411e0e4093334d2fa76bab9e5e831f",
+      "size_bytes": 830
+    },
+    "outputs/forecasting-v1/diagnostics-final/provenance.json": {
+      "sha256": "663049f965bfc704248bf8b8ac29fbc1f081205d3d620cfddd93f9a717de3fa9",
+      "size_bytes": 954
+    },
+    "outputs/forecasting-v1/diagnostics-final/station_distribution.csv": {
+      "sha256": "6e09ed7a00443818af7abe09cac30d6967b76e6274e94e9021628562e273fd34",
+      "size_bytes": 739
+    },
+    "outputs/forecasting-v1/diagnostics-final/station_id.csv": {
+      "sha256": "e6746cdae56fae101762aa781817725526d23441c9f4e4e72a584db3a8139cce",
+      "size_bytes": 34133
+    },
+    "outputs/forecasting-v1/saved-test-predictions.parquet": {
+      "rows": 220800,
+      "schema": [
+        {
+          "name": "station_id",
+          "type": "large_string"
+        },
+        {
+          "name": "origin_utc",
+          "type": "timestamp[ms, tz=UTC]"
+        },
+        {
+          "name": "target_hour_utc",
+          "type": "timestamp[us, tz=UTC]"
+        },
+        {
+          "name": "horizon_step",
+          "type": "int64"
+        },
+        {
+          "name": "actual",
+          "type": "float"
+        },
+        {
+          "name": "trusted",
+          "type": "bool"
+        },
+        {
+          "name": "tft_q10_raw",
+          "type": "float"
+        },
+        {
+          "name": "tft_q50_raw",
+          "type": "float"
+        },
+        {
+          "name": "tft_q90_raw",
+          "type": "float"
+        },
+        {
+          "name": "lag24",
+          "type": "double"
+        },
+        {
+          "name": "lag168",
+          "type": "double"
+        },
+        {
+          "name": "xgb_raw",
+          "type": "float"
+        },
+        {
+          "name": "xgb_clipped",
+          "type": "float"
+        },
+        {
+          "name": "tft_q10_clipped",
+          "type": "float"
+        },
+        {
+          "name": "tft_q50_clipped",
+          "type": "float"
+        },
+        {
+          "name": "tft_q90_clipped",
+          "type": "float"
+        },
+        {
+          "name": "mlp_raw",
+          "type": "double"
+        },
+        {
+          "name": "mlp_clipped",
+          "type": "double"
+        },
+        {
+          "name": "lstm_raw",
+          "type": "double"
+        },
+        {
+          "name": "lstm_clipped",
+          "type": "double"
+        }
+      ],
+      "sha256": "4f726d274a1d3090078f7663cc591e2d560d06d332056d168c6c38289f95accd",
+      "size_bytes": 17359043
+    },
+    "outputs/gcp-pilots/final-december-january-batch-20261023/january-2026/pilot-result.json": {
+      "sha256": "17c6ca9924157089e689f1aa30156d228dfee3e4bd2a9604c4258fa1333c43f9",
+      "size_bytes": 151428
+    },
+    "src/citypulse_ai/api/station_artifacts.json": {
+      "sha256": "a6fb677822b78ce181ca27e1f015b36c9d88bcf775457132a3ed2519bdd0eef1",
+      "size_bytes": 6806
+    }
+  },
+  "subset": {
+    "horizon_rule": "steps 1..24; target UTC = origin UTC + (step-1) elapsed hours",
+    "is_full_evaluation": false,
+    "local_origin_dates": [
+      "2025-10-01",
+      "2025-11-02",
+      "2025-12-01"
+    ],
+    "rows": 648,
+    "selection_rule": "Training-mean ascending station ranks (zero-based) [0, 16, 33, 34, 50, 66, 67, 83, 99]; one fixed origin per test month, including November DST fall-back; no error-based selection",
+    "station_ids": [
+      "5854.09",
+      "6072.06",
+      "6140.05",
+      "6266.06",
+      "6432.11",
+      "6464.09",
+      "6584.12",
+      "7175.05",
+      "7323.09"
+    ],
+    "windows": 27
+  },
+  "transformation": "Exact selected source rows/types, canonical row order; strip pandas metadata; no rounding, inference, refitting or new evaluation"
+}

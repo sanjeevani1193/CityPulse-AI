@@ -371,6 +371,12 @@ Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjee
 
 ## Reproducing the project
 
+**Offline Decision Studio (in development):** a separate Streamlit + Plotly app
+now presents Overview and Model Comparison from verified, precomputed artifacts.
+It requires no GCP credentials or trained-model runtime. Forecast Explorer,
+SQLPilot and ExperimentLab interactive workspaces are marked upcoming; public
+hosting is not yet verified. See [local setup, provenance and scope](docs/decision_studio.md).
+
 **Private cloud API:** XGBoost is deployed on authenticated Cloud Run in Frankfurt;
 opening its URL without credentials returns 403. [Service URL, authorized verification
 and cleanup](docs/cloudrun_xgboost.md) · [Terraform and automatic CI/CD](docs/cloudrun_cd.md).

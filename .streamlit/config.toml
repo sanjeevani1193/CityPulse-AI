@@ -8,3 +8,38 @@ fileWatcherType = "none"
 
 [client]
 showErrorDetails = false
+
+# One coherent CityPulse palette, independent of the operating-system scheme.
+# Native tokens style controls, tables and the header, not only CSS surfaces.
+[theme]
+base = "light"
+primaryColor = "#167E87"
+backgroundColor = "#F3F7FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#21384B"
+linkColor = "#116971"
+font = "Arial, sans-serif"
+borderColor = "#CBD9E2"
+baseRadius = "0.65rem"
+dataframeHeaderBackgroundColor = "#E5EEF3"
+dataframeHeaderTextColor = "#21384B"
+showSidebarBorder = true
+
+[theme.sidebar]
+primaryColor = "#80DDD5"
+backgroundColor = "#102D40"
+secondaryBackgroundColor = "#193F52"
+textColor = "#FFFFFF"
+linkColor = "#9BE6E4"
+borderColor = "#365469"
+
+# Keep persisted light/dark selections coherent too; no half-themed dark mode.
+[theme.light]
+backgroundColor = "#F3F7FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#21384B"
+
+[theme.dark]
+backgroundColor = "#F3F7FA"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#21384B"
