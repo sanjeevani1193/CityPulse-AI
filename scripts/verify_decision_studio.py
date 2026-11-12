@@ -1,5 +1,6 @@
 """Real loopback HTTP/WebSocket smoke test; always stop the owned app process."""
 import asyncio
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import time
 import urllib.request
+from urllib.parse import urljoin, urlparse
 
 from streamlit.proto.BackMsg_pb2 import BackMsg
 from streamlit.proto.ForwardMsg_pb2 import ForwardMsg
@@ -86,12 +88,21 @@ async def render(port):
         assert metrics["95% Welch confidence interval"] == "[1.7190, 3.7871]"
         assert metrics["Two-sided p-value"] == "8.03e-07"
         assert sum(e.HasField("plotly_chart") for e in experiment) == 3
+        report_button = next(e.download_button for e in experiment if e.HasField("download_button")
+                             and e.download_button.label == "Download saved synthetic HTML report")
+        download_url = urljoin(f"http://127.0.0.1:{port}/", report_button.url)
+        assert urlparse(download_url).netloc == f"127.0.0.1:{port}"
+        with urllib.request.urlopen(download_url, timeout=3) as response:
+            assert response.status == 200
+            assert hashlib.sha256(response.read()).digest() == hashlib.sha256(
+                (ROOT / "docs/experimentlab_report.html").read_bytes()).digest()
         assert theme_verified
         return {"overview_rendered": True, "model_comparison_rendered": True,
                 "forecast_explorer_rendered": True, "saved_forecast_points": 24,
                 "tft_band_rendered": True, "plotly_charts_per_comparison_workspace": 2,
                 "sqlpilot_rendered": True, "real_curated_sql_starts": 1998,
                 "experimentlab_rendered": True, "saved_cuped_metrics_verified": True,
+                "html_download_http_checksum_verified": True,
                 "native_light_dark_theme_config_verified": True}
 
 

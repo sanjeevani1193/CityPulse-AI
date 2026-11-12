@@ -2,7 +2,8 @@
 
 This is a separate Streamlit + Plotly presentation of **saved** CityPulse results.
 All five workspaces are implemented: Overview, Forecast Explorer, Model Comparison,
-curated SQLPilot, and ExperimentLab & Methodology. Milestone 5 awaits browser visual review.
+curated SQLPilot, and ExperimentLab & Methodology. All five have user-approved
+visual design. See the [release candidate checks and approval gates](decision_studio_release.md).
 It is not publicly hosted yet and does not perform live forecasts, LLM calls or
 statistical experiments. SQLPilot executes only fixed local reference queries.
 GCP backup/retirement is a separate task.
@@ -504,7 +505,7 @@ merge was performed.
 
 ## Milestone 5: ExperimentLab & Methodology
 
-**Implemented offline; browser visual review and public hosting remain pending.**
+**Implemented offline; browser visual review is approved. Public hosting remains pending.**
 The original ExperimentLab engine, report, research files, forecasting results and
 SQLPilot bundle are preserved. This workspace displays saved evidence; it does not
 run a new experiment. The approved navy/teal/light-canvas theme is reused.

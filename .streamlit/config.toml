@@ -2,7 +2,8 @@
 gatherUsageStats = false
 
 [server]
-address = "127.0.0.1"
+# Let the hosting platform choose its interface. Local launch commands bind
+# explicitly to 127.0.0.1; a global loopback bind blocks a hosted reverse proxy.
 headless = true
 fileWatcherType = "none"
 
