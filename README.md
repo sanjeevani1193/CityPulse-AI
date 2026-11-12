@@ -2,9 +2,11 @@
 
 ### Urban mobility forecasting · Agentic data analytics · Statistical experimentation
 
-**~90 million accepted Citi Bike ride starts, six evaluated forecasting methods, and a private XGBoost API deployed on Google Cloud Run.** CityPulse AI combines historical data engineering and station-level forecasting with **SQLPilot**, a LangGraph/MCP text-to-SQL application, and **ExperimentLab**, a synthetic statistical experimentation lab. Terraform manages deployment infrastructure; GitHub Actions CI/CD verifies and deploys relevant main-branch changes using keyless Workload Identity Federation.
+**[Live Demo - CityPulse Decision Studio](https://citypulse-ai-decision-studio.streamlit.app/)** · Public access, no credentials required.
 
-[Forecasting](#forecasting) · [SQLPilot](#sqlpilot) · [ExperimentLab](#experimentlab) · [Architecture](#architecture) · [Reproduce](#reproduce) · [CI evidence](#verification) · [Limitations](#limitations) · [Documentation](#documentation)
+**~90 million accepted Citi Bike ride starts, six evaluated forecasting methods, and a public interactive Decision Studio.** CityPulse AI combines historical data engineering and station-level forecasting with **SQLPilot**, a LangGraph/MCP text-to-SQL application, and **ExperimentLab**, a synthetic statistical experimentation lab. The separate authenticated XGBoost Cloud Run deployment demonstrated Terraform IaC and keyless GitHub Actions CI/CD. That cloud deployment workflow is now manually disabled; the public Studio runs independently of GCP.
+
+[Decision Studio](#decision-studio) · [Forecasting](#forecasting) · [SQLPilot](#sqlpilot) · [ExperimentLab](#experimentlab) · [Architecture](#architecture) · [Reproduce](#reproduce) · [CI evidence](#verification) · [Limitations](#limitations) · [Documentation](#documentation)
 
 ## At a glance
 
@@ -14,7 +16,32 @@
 | **SQLPilot** | Streamlit UI; LangGraph workflow; local MCP client/server; Groq-hosted LLM; constrained read-only DuckDB queries | **6/9** correct overall outcomes in the initial **live** LLM evaluation; **65** container tests passed |
 | **ExperimentLab** | Randomized 100-station synthetic trial; Welch inference; CUPED; power/MDE calculations; HTML report | CUPED-adjusted synthetic effect **+2.7531** starts/station/day, 95% CI **[1.7190, 3.7871]**; **19** tests passed |
 
-> **Scope:** Forecasts estimate *accepted recorded bike starts*, not unconstrained customer demand. The SQLPilot LLM benchmark is a small, nine-case initial baseline. ExperimentLab's intervention and outcomes are fully synthetic. No continuously streaming ingest or public production deployment is claimed.
+> **Scope:** Forecasts estimate *accepted recorded bike starts*, not unconstrained customer demand. The SQLPilot LLM benchmark is a small, nine-case initial baseline. ExperimentLab's intervention and outcomes are fully synthetic. The public app is an offline research showcase, not a public model-serving API or continuously streaming production system.
+
+<a id="decision-studio"></a>
+
+## Public CityPulse Decision Studio
+
+The [Streamlit application](https://citypulse-ai-decision-studio.streamlit.app/)
+brings the project's evidence into five interactive workspaces. The project owner
+verified anonymous access to all five in an incognito browser. It uses packaged,
+checksum-verified artifacts, with no GCP credentials, paid API or model loading.
+
+| Workspace | What visitors can explore |
+|---|---|
+| **Overview** | Verified project scope, architecture, evidence and methodology links |
+| **Forecast Explorer** | Nine exact station IDs, historical origins, complete 24-hour saved forecasts, trusted actuals, TFT quantiles and selected-window errors |
+| **Model Comparison** | Six methods, validation/test metrics, model filters and saved full-test diagnostics; window-level examples do not replace the official 220,800-target benchmark |
+| **SQLPilot** | Six curated questions executed through the existing read-only SQL safety core on a verified small sample; **no live LLM generation or agent/MCP session in the public app** |
+| **ExperimentLab & Methodology** | Saved **fully synthetic** station-randomized results, Welch/CUPED comparisons, intervals, power/MDE, station filters and the original HTML report |
+
+The Studio is interactive because controls select evidence, Plotly charts respond
+to filters, and approved SQL runs locally on the hosted sample. It does **not**
+generate new model forecasts, call Groq, run a new experiment or access GCS.
+The original agent, full six-model serving application and historical private
+XGBoost cloud deployment remain separate implementations in this repository.
+[Local setup and artifact provenance](docs/decision_studio.md) ·
+[Public release evidence and retirement gates](docs/decision_studio_release.md).
 
 ## Why build this?
 
@@ -41,11 +68,11 @@ flowchart TB
         M --> T["MLflow experiment tracking"]
     end
 
-    subgraph Cloud["Cloud deployment: XGBoost only, authenticated access"]
+    subgraph Cloud["Historical cloud deployment: XGBoost only, authenticated access"]
         M -->|Frozen XGBoost only| PK["XGBoost Docker build context"]
         C -->|Pinned small artifacts| PK
         PK --> CB["Cloud Build<br/>linux/amd64 image"]
-        GH["Relevant push to main or manual dispatch"] --> CI["GitHub Actions<br/>all required CI on the exact commit"]
+        GH["Historical push / manual CD<br/>deployment workflow now disabled"] --> CI["GitHub Actions<br/>all required CI on the exact commit"]
         CI --> WIF["OIDC / Workload Identity Federation"]
         WIF --> PK
         CB --> AR["Private Artifact Registry"]
@@ -71,9 +98,22 @@ flowchart TB
         E["Synthetic randomized 100-station experiment"] --> W["Welch inference + CUPED<br/>confidence intervals, power and MDE"]
         W --> H["Reproducible HTML report"]
     end
+
+    subgraph Studio["Public Decision Studio: Streamlit + Plotly, no GCP runtime dependency"]
+        DP["Verified saved forecasts<br/>benchmarks and diagnostics"] --> DU["Five interactive workspaces"]
+        DQ["Curated read-only SQL<br/>packaged small sample"] --> DU
+        DE["Saved synthetic experiment<br/>results and report"] --> DU
+    end
+    M -.->|Saved artifact exports| DP
+    P -.->|Stripped sample export| DQ
+    W -.->|Saved evidence only| DE
 ```
 
 **Boundary worth noting:** Groq receives approved question/schema context to generate candidate SQL; SQL validation, tool execution and result handling remain local. The MCP server exposes only named operations, not unrestricted machine access. SQLPilot is an interactive analysis tool; it does **not** access the full private historical GCS archive for each query.
+
+Those LangGraph/MCP/Groq paths describe the original SQLPilot application, not
+the public Studio. Dashed export paths prepare offline evidence; they are not
+runtime calls from the public app to models, GCS or an LLM.
 
 ---
 
@@ -194,7 +234,7 @@ training run. See [bias, station and temporal diagnostics](docs/forecasting_v1_d
 
 - FastAPI supports timestamped **24-step station-level forecasts** with a model-selection interface; XGBoost is the default and TFT includes quantiles.
 - Native and container HTTP checks exercised **all six methods** with frozen model artifacts. MLflow tracks experiments.
-- **Cloud deployment:** only the frozen XGBoost adapter is deployed to authenticated Cloud Run. The full six-model gateway and separate TensorFlow worker remain available in the repository; SQLPilot and ExperimentLab are not deployed there.
+- **Historical cloud deployment:** only the frozen XGBoost adapter was deployed and verified on authenticated Cloud Run. The full six-model gateway and separate TensorFlow worker remain available in the repository; SQLPilot and ExperimentLab were not deployed there. The public Decision Studio is a separate offline application; disabling CD does not itself retire GCP resources.
 
 ### MLOps and software engineering
 
@@ -214,12 +254,14 @@ training run. See [bias, station and temporal diagnostics](docs/forecasting_v1_d
   mounts trusted artifacts read-only; the XGBoost-only cloud image packages three
   checksum-verified artifacts and omits PyTorch/TensorFlow.
 - **Infrastructure and CI/CD:** Terraform manages the private registry, dedicated
-  identities, WIF and authenticated Cloud Run service. Relevant main pushes wait
-  for all three CI workflows on the exact commit, then Cloud Build produces an
-  amd64 image and Actions deploys its immutable digest. No permanent service-account
+  identities, WIF and authenticated Cloud Run service. In the verified deployment
+  design, relevant main pushes waited for all three CI workflows on the exact
+  commit, then Cloud Build produced an amd64 image and Actions deployed its
+  immutable digest. No permanent service-account
   keys are used. Concurrency serializes deployments; there are no automatic retries.
   The service uses request-based billing, min 0/max 1, 0.5 CPU and 512 MiB. These
-  are resource controls, not a hard spending cap.
+  are resource controls, not a hard spending cap. Cloud Run CD is now manually
+  disabled; ordinary non-cloud CI continues. No GCP retirement is claimed here.
 
 **Technical details:** [Forecasting serving guide](docs/forecasting_v1.md) · [Six-model follow-up benchmark](docs/six_model_followup_benchmark.md) · [Diagnostic analysis](docs/forecasting_v1_diagnostics.md) · [Cloud release verification](docs/cloud_release_verification.md).
 
@@ -341,9 +383,10 @@ require a different real-world design. No real intervention was performed.
 
 ## Verification & CI/CD
 
-GitHub Actions runs tests on standard hosted runners. For deployment-relevant
-main changes, the cloud job starts only after all three required CI suites pass
-on that exact SHA. Documentation-only pushes do not build or deploy. A green job
+GitHub Actions runs tests on standard hosted runners. The historically verified
+cloud job required all three CI suites to pass on the exact deployment SHA;
+that deployment workflow is now **manually disabled**. Ordinary non-cloud CI
+continues for relevant changes. A green job
 establishes the specified checks, not universal model or LLM correctness.
 
 | Component | Verified v1 release checks | Evidence |
@@ -367,20 +410,44 @@ claim or availability SLO. [Architecture, run IDs, image digest and reproduction
 
 Integrated three-component v1 milestone: **[`f8e497e`](https://github.com/sanjeevani1193/CityPulse-AI/commit/f8e497e)** (`main`).
 
+**Decision Studio release QA:** [PR #2](https://github.com/sanjeevani1193/CityPulse-AI/pull/2)
+was merged as `4eda175`. [Post-merge Ubuntu/Python 3.14 QA](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528431)
+completed clean dependency installation, **205 tests passed, 4 explicitly
+deselected private-source export checks**, and real HTTP/WebSocket checks across
+all five pages, curated SQL and a checksum-identical HTML download. No failures
+or skips occurred in that job; the four excluded source checks passed locally.
+[Inference](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528389),
+[SQLPilot](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528423)
+and [ExperimentLab](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528496)
+also passed. Public anonymous access was subsequently manually verified by the
+project owner; this is separate from automated local-server CI evidence and is
+not a load test or availability guarantee.
+
 <a id="reproduce"></a>
 
 ## Reproducing the project
 
-**Offline Decision Studio (in development):** a separate Streamlit + Plotly app
-now presents Overview, historical Forecast Explorer, Model Comparison,
-curated SQLPilot queries against a verified local sample, and ExperimentLab &
-Methodology with saved synthetic effects, confidence intervals and power/MDE.
-It requires no GCP credentials, LLM key or trained-model runtime. Public hosting
-is not yet verified. See [local setup, provenance and scope](docs/decision_studio.md)
+**Public Decision Studio:** [open the live app](https://citypulse-ai-decision-studio.streamlit.app/)
+or run it locally with Python **3.14** and the lightweight app requirements:
+
+```sh
+# From a checkout of this repository; keep the app environment separate.
+python3.14 -m venv .venv-decision-studio
+.venv-decision-studio/bin/python -m pip install --only-binary=:all: \
+  -r apps/decision_studio/requirements.txt
+.venv-decision-studio/bin/python -m streamlit run \
+  apps/decision_studio/streamlit_app.py --server.address=127.0.0.1 --server.port=8502
+```
+
+Open `http://127.0.0.1:8502`. All five workspaces use the reviewed bundles already
+in Git; no GCP credentials, LLM key, full historical download or trained-model
+runtime is needed. See [local setup, provenance and scope](docs/decision_studio.md)
 and [release QA, Streamlit configuration and retirement approval gates](docs/decision_studio_release.md).
 
-**Private cloud API:** XGBoost is deployed on authenticated Cloud Run in Frankfurt;
-opening its URL without credentials returns 403. [Service URL, authorized verification
+**Historical private cloud API:** XGBoost was deployed and verified on authenticated
+Cloud Run in Frankfurt, including anonymous-access rejection (403). This is not
+the public Studio, and current GCP resource availability is not rechecked here.
+[Service URL, authorized verification
 and cleanup](docs/cloudrun_xgboost.md) · [Terraform and automatic CI/CD](docs/cloudrun_cd.md).
 The local commands below run the **full six-model application**, not the cloud-only adapter.
 
@@ -389,7 +456,7 @@ git clone https://github.com/sanjeevani1193/CityPulse-AI.git
 cd CityPulse-AI
 ```
 
-> **Data/artifact availability:** Large historical files, model weights, private GCS objects and local sample outputs are intentionally not embedded in Git. A fresh clone may require the documented artifact/data setup before executing services or evaluations. Avoid assuming `git clone` alone reconstructs the full 90M-ride benchmark.
+> **Data/artifact availability:** The public Studio's small demonstration bundles are included in Git. Large historical files, model weights, private GCS objects and other local research outputs are intentionally excluded. The full forecasting/agent services and research evaluations may require their documented artifact/data setup; cloning the repository does not reconstruct the full 90M-ride benchmark.
 
 **Forecasting — frozen artifacts required.** Use the existing CPU gateway and
 separate TensorFlow environments described in [the serving guide](docs/forecasting_v1.md).
@@ -466,9 +533,9 @@ See [design and reproduction details](docs/experimentlab.md).
 - **Recorded activity not latent demand:** Bike starts are an operational proxy, not an estimate of rides lost to empty/full docks or other unobserved demand.
 - **Model comparison:** The six-method follow-up has a documented non-blind comparison limitation. Splits, common target keys and validation-only follow-up tuning are disclosed.
 - **LLM reliability:** One successful demo query does not establish general accuracy; the initial nine-case live baseline was 6/9, with three documented failures and no proven improved retest.
-- **Privacy and safety:** The MCP server restricts queries; hosted LLM use transmits the approved question/schema context externally. Rate limits and Zero Data Retention settings are account/provider dependent.
+- **Privacy and safety:** The original MCP server restricts queries; approved hosted LLM use transmits question/schema context externally. Rate limits and Zero Data Retention settings are account/provider dependent. The public Studio's curated SQL workspace makes no LLM calls.
 - **Synthetic causal evidence:** ExperimentLab is an educational/reproducible simulation, not evidence that Citi Bike implemented or benefited from a redistribution policy.
-- **Deployment:** Private XGBoost cloud inference and automatic CI/CD are verified. The full six-model app, SQLPilot and ExperimentLab have separate local/container verification; public hosting, production traffic, load-test capacity and an availability SLO are not claimed.
+- **Deployment:** Historical private XGBoost cloud inference and automatic CI/CD are verified; cloud CD is now disabled. The public offline Studio has owner-verified anonymous access to all five pages. The full six-model app and original SQLPilot retain separate local/container verification. Production traffic, load-test capacity, continuous availability and a real-world intervention are not claimed. GCP retirement remains a separate task.
 
 <a id="documentation"></a>
 
@@ -476,6 +543,7 @@ See [design and reproduction details](docs/experimentlab.md).
 
 | Area | Detailed evidence and instructions |
 |---|---|
+| Public Decision Studio | [Live app](https://citypulse-ai-decision-studio.streamlit.app/) · [Local setup and provenance](docs/decision_studio.md) · [Release QA and retirement gates](docs/decision_studio_release.md) |
 | Final data and labels | [Final station dataset](docs/final_tft_dataset.md) · [Versioned labels](docs/station_training_labels.md) · [Historical ETL](docs/historical_ingestion.md) |
 | Model development | [TFT training](docs/tft_training.md) · [XGBoost](docs/station_xgboost_benchmark.md) · [MLP](docs/station_mlp_forecasting.md) · [LSTM](docs/station_lstm_forecasting.md) |
 | Evaluation | [Original four-method test](docs/final_held_out_benchmark.md) · [Six-method follow-up](docs/six_model_followup_benchmark.md) · [Saved-prediction diagnostics](docs/forecasting_v1_diagnostics.md) |
@@ -505,7 +573,8 @@ The main code lives in `src/citypulse_ai/`, tests in `tests/`, workflows in
 
 **Project:** CityPulse AI — Time-Series Forecasting, Agentic AI & MLOps
 
-**Status:** Three-component v1 implemented and verified, with private XGBoost
-cloud deployment and automatic CI/CD. The six-model benchmark, SQLPilot live
+**Status:** Public five-workspace Decision Studio deployed and manually verified,
+with historical private XGBoost cloud deployment and automatic CI/CD evidence.
+Cloud CD is manually disabled. The six-model benchmark, SQLPilot live
 evaluation and synthetic ExperimentLab results have distinct evidence boundaries;
 no public production traffic or real redistribution intervention is claimed.

@@ -1,8 +1,46 @@
-# Decision Studio release candidate and retirement gates
+# Decision Studio public release and retirement gates
 
-Local review date: **November 12, 2026**. All five workspaces have user-approved
-visual design. Public deployment, the PR/merge and GCP retirement are **pending**.
-This document records preparation, not a claim that those actions occurred.
+Release documentation updated **November 12, 2026**. The project owner reports
+successful incognito-browser verification of all five publicly deployed workspaces:
+Overview, Forecast Explorer, Model Comparison, SQLPilot, and ExperimentLab & Methodology.
+
+**[Live Decision Studio](https://citypulse-ai-decision-studio.streamlit.app/)**
+
+[PR #2](https://github.com/sanjeevani1193/CityPulse-AI/pull/2) was merged normally
+as `4eda1751ccdc72d0778995fc1f9ed480a91cd4cf`, preserving the five development
+commits and feature branch. Public access is owner-reported manual evidence;
+automated native Linux evidence is recorded separately below. No new browser
+automation, model inference or cloud operation was performed for this documentation
+update. GCP backup/retirement remains **pending**, not authorized by public release.
+
+## Public runtime and post-merge QA
+
+The public Streamlit app presents verified historical forecasts, saved six-method
+benchmark results and diagnostics, fixed read-only SQL over a small stripped sample,
+and saved fully synthetic experiment outcomes. It does not load forecasting models,
+generate SQL with an LLM, run MCP/agent sessions, simulate new experiments or call GCP.
+Interactivity comes from selectors/charts and actual curated local SQL execution.
+The historical authenticated XGBoost Cloud Run deployment is a separate system;
+its disabled CD workflow does not imply its resources or billing have been retired.
+
+| Post-merge workflow | Verified result |
+|---|---|
+| [Decision Studio offline QA](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528431) | Ubuntu 24.04/Python 3.14; clean install and `pip check`; **205 passed, 4 explicitly deselected, zero failures/skips**; real HTTP/WebSocket checks of all five pages, curated SQL and checksum-identical HTML download |
+| [Inference CI](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528389) | Configuration checks, **130 gateway + 17 worker tests** passed; two nonblocking test-client deprecation warnings |
+| [SQLPilot deterministic core](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528423) | Core, application and container checks passed |
+| [ExperimentLab statistics](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528496) | **19 tests** and generated-report checksum verification passed |
+
+All eight post-merge jobs succeeded on `4eda175`. The four explicit exclusions
+compare exports with private retained research sources; those checks passed locally.
+CI uses public-safe bundled artifacts and never restores those private inputs.
+The native HTTP smoke measured about 229 MiB peak server RSS, took 2.72 seconds,
+and stopped its owned server. These are engineering smoke tests, not a public
+load test, uptime guarantee, new forecast benchmark or live LLM evaluation.
+
+The owner's anonymous browser checks establish public access to the five pages.
+They are not represented as a newly automated public-URL test, continuous monitoring
+or a pixel-level accessibility certification. No screenshot evidence was generated
+during this documentation update.
 
 ## Local release evidence
 
@@ -29,8 +67,8 @@ was interrupted by the same guard. Neither established an application failure,
 and swap activity cannot be attributed to these processes alone. The original
 tests completed in separate bounded groups. The new source-only assertion then
 passed with a standard-library parent instead of a second pytest runtime. All
-three new check functions were exercised successfully; a completed pytest run of
-that new file is still for Linux CI to verify.
+three new check functions were exercised successfully; the subsequent native Linux
+pytest run also passed, as recorded in the post-merge evidence above.
 
 Safeguards were retained: 512 MiB owned RSS, 256 MiB host swap-use growth, no
 critical memory pressure, 15 GiB free-disk reserve, ten-minute verification bound.
@@ -66,20 +104,21 @@ were not regenerated or overwritten.
   `contents: read`, an eight-minute timeout, no secrets/OIDC/GCP steps, and no
   deployment job. Existing cloud workflows are unchanged.
 
-**Clean Linux execution remains unverified until that CI job runs.** Cross-target
-wheel resolution and a source-only Mac run are useful checks, not substitutes
-for native Linux installation/execution. The Linux job explicitly deselects four
+**Clean Linux execution is now verified by the post-merge CI job above.** The
+earlier cross-target wheel resolution and source-only Mac run were preliminary
+checks, not substitutes for native execution. The Linux job explicitly deselects four
 private-source exporter comparisons: three in `test_decision_studio.py` and one
 in `test_decision_studio_sql.py`. Those passed locally. All bundled-artifact,
 public behavior, statistical and SQL safety checks remain required. With the
-current test collection, Linux should run 205 tests and deselect four; these are
-expected counts, not a reported CI result.
+current test collection, the measured Linux result is **205 passed, 4 deselected**.
 
-## Safe GitHub integration: approval required
+## Completed GitHub integration and deployment safety
 
-Read-only GitHub API inspection confirmed `cloudrun-cd.yml` is **active** and
-remote `main` is `ff9762570592526a5c2f621ad3cb7546d9126c39`. No push, workflow
-dispatch, settings change or GCP operation was performed during this review.
+The initial Phase B inspection found `cloudrun-cd.yml` active before integration.
+The owner subsequently disabled it, and GitHub API checks before push, before
+merge, after merge and during this documentation review confirmed
+**`disabled_manually`**. Main now contains `4eda175`; no GCP deployment or
+authenticated cloud verification workflow was triggered by the integration.
 
 The deployment workflow has a `push` trigger for relevant `main` paths and a
 manual dispatch trigger. It can authenticate with WIF, read private inputs and
@@ -87,22 +126,20 @@ launch Cloud Build/Cloud Run after CI succeeds. The Decision Studio diff does no
 currently match those cloud deployment path filters, but path filters alone are
 not the retirement control: future merges or edits could match them.
 
-Before **any** feature push/merge:
+The approved integration followed this sequence; retain it as historical safety evidence:
 
-1. In GitHub **Actions**, select **XGBoost Cloud Run CD**, open its workflow menu,
-   and choose **Disable workflow**. Preserve its YAML, existing runs and IAM.
-2. Confirm disabled status to the agent. This changes repository settings and
-   must not be done without the requested confirmation/authorization.
-3. After confirmation and push approval, push only the feature branch normally:
-   `git push -u origin feature/citypulse-decision-studio`.
-4. Prepare a PR against `main`; inspect the complete diff and required checks.
-   Expected ordinary CI: Inference CI, SQLPilot deterministic core,
-   ExperimentLab statistics, and the new Decision Studio offline QA.
-5. Do not dispatch **Frozen station100 release verification**: that manual-only
-   workflow authenticates to GCS and is unnecessary here. Do not dispatch CD.
-6. Review Linux results, any declared exclusions and secrets/file checks. Require
-   a separate user approval before merging. Do not force-push or change protection
-   rules to bypass failed checks.
+1. The owner disabled **XGBoost Cloud Run CD** through GitHub Actions, preserving
+   its YAML, runs and IAM; the API state was independently checked.
+2. After explicit approval, the reviewed feature branch was pushed normally.
+3. PR #2's 45 files, artifact hashes, five commits and non-cloud CI were verified.
+4. After separate merge approval, a normal merge preserved the five commits and
+   retained the feature branch. Local main was safely fast-forwarded.
+5. All applicable post-merge non-cloud CI passed. Neither CD nor the manual-only
+   **Frozen station100 release verification** workflow was dispatched.
+
+Keep cloud CD disabled. Do not re-enable it or dispatch cloud-authenticated checks
+as part of documentation or Community Cloud updates. Future pushes/merges still
+require the user's authorization; do not force-push or bypass failed checks.
 
 Disabling the CD workflow neither shuts down Cloud Run nor disables ordinary CI.
 Preserving Git history retains source and engineering evidence, not the private
@@ -113,14 +150,15 @@ datasets, fitted weights, MLflow databases or unknown VM disk contents.
 | Setting | Exact value |
 |---|---|
 | Repository | `sanjeevani1193/CityPulse-AI` |
-| Branch | `main`, after the approved PR is merged |
+| Branch | `main` |
 | Entrypoint | `apps/decision_studio/streamlit_app.py` |
 | Python | **3.14**, explicitly selected under Advanced settings |
 | Dependencies | `apps/decision_studio/requirements.txt` |
 | Configuration | Repository-root `.streamlit/config.toml`; no fixed server address |
 | Secrets | None; leave the app secrets empty |
-| Visibility | Public/anonymous, after deployment approval |
-| Suggested subdomain | `citypulse-ai-decision-studio` if available; not reserved or deployed |
+| Visibility | Public/anonymous, verified by the project owner in an incognito browser |
+| Actual URL | `https://citypulse-ai-decision-studio.streamlit.app/` |
+| Custom subdomain | `citypulse-ai-decision-studio` |
 
 Community Cloud executes from the repository root and searches the entrypoint's
 directory for dependencies before the repository root. The app's requirements
@@ -129,13 +167,14 @@ No `packages.txt`, model-serving environment or cloud credentials are required.
 The entrypoint resolves `src/` from its own path; bundle/report paths also resolve
 from module locations, not private workstation paths.
 
-After merge and separate deployment approval, use **Create app** in
-`share.streamlit.io`, enter these coordinates, select Python 3.14, and deploy.
-Do not use a default Python version without checking it. Monitor build logs,
-then test the actual URL in an anonymous session: all pages, selectors, SQL run,
-report/CSV downloads, narrow viewport, keyboard focus and sidebar collapse.
-Only then record the real URL and public-verification evidence in README.
-No public URL or currently active cloud service is certified by local tests.
+The deployment coordinates above match the merged repository. For reproducing
+the setup, Community Cloud's **Create app** flow accepts these repository/branch/
+entrypoint values; Advanced settings selects Python 3.14 with secrets left empty.
+The requirements file is discovered automatically beside the entrypoint.
+Do not infer public success from local tests alone: public access was separately
+confirmed by the owner. Additional checks of downloads, narrow viewports, keyboard
+focus and sidebar behavior remain useful; no new automated public test is claimed
+here. This documentation task does not create, redeploy or rename an app.
 
 Official setup: [file organization](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/file-organization),
 [dependencies](https://docs.streamlit.io/deploy/streamlit-community-cloud/deploy-your-app/app-dependencies),
@@ -241,8 +280,9 @@ archive does not certify the old VM disk contents or current cloud drift.
 
 ### Billing-shutdown gate and manual procedure
 
-**Retirement is not yet safe to authorize:** independent cloud-only backups,
-disk disposition, CD disablement and public-app verification are outstanding.
+**Retirement is not yet safe to authorize:** independent cloud-only backups and
+unknown disk contents remain unresolved. CD disablement and owner-reported public
+app verification are complete; neither substitutes for research-data backups.
 Before recommending shutdown, record completion of each gate, preserve current
 state/infrastructure documentation, and review final charges/remaining resources.
 
@@ -262,9 +302,9 @@ and does not erase charges incurred earlier, which can appear later. GitHub and
 the offline Community Cloud app are separate systems, but their independence must
 be verified before shutdown. [Official impact, permissions and manual steps](https://docs.cloud.google.com/billing/docs/how-to/modify-project#disable_billing_for_a_project).
 
-## First remote approval checkpoint
+## Remaining approval checkpoints
 
-Confirm that **XGBoost Cloud Run CD is disabled at repository level**, and then
-authorize pushing this feature branch and opening a PR. No merge is authorized
-yet. Linux QA must succeed on the exact PR revision. Public deployment and all
-backup/transfers/billing/resource changes remain separate later approvals.
+GitHub integration and public deployment are complete. These documentation changes
+are prepared on a separate branch and require approval before any commit/push or
+merge. All backup transfers, disk inspection/disposition, resource deletion,
+infrastructure changes and billing shutdown remain separate later approvals.

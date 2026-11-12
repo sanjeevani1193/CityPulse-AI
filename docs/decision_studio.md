@@ -3,9 +3,11 @@
 This is a separate Streamlit + Plotly presentation of **saved** CityPulse results.
 All five workspaces are implemented: Overview, Forecast Explorer, Model Comparison,
 curated SQLPilot, and ExperimentLab & Methodology. All five have user-approved
-visual design. See the [release candidate checks and approval gates](decision_studio_release.md).
-It is not publicly hosted yet and does not perform live forecasts, LLM calls or
-statistical experiments. SQLPilot executes only fixed local reference queries.
+visual design and owner-reported incognito-browser public-access verification.
+**[Open the live Decision Studio](https://citypulse-ai-decision-studio.streamlit.app/)**.
+See the [public release checks and retirement gates](decision_studio_release.md).
+The public app does not perform live forecasts, LLM calls or statistical
+experiments. SQLPilot executes only fixed local reference queries.
 GCP backup/retirement is a separate task.
 
 The existing six-model API, models, original SQLPilot, ExperimentLab, Terraform and
@@ -14,15 +16,15 @@ needed by this app. No artifact downloads occur at startup.
 
 ## Run locally
 
-Use Python 3.14 (the locally tested interpreter); use the same version for later
-Community Cloud deployment. Dependencies live beside the app entrypoint to avoid
+Use Python 3.14 (also verified in native Linux CI and selected for Community
+Cloud). Dependencies live beside the app entrypoint to avoid
 installing the repository's forecasting extras. The runtime requires only the
 six packages in `apps/decision_studio/requirements.txt` and their dependencies.
 
 ```sh
-python3 -m venv .venv-decision-studio
+python3.14 -m venv .venv-decision-studio
 .venv-decision-studio/bin/python -m pip install --only-binary=:all: \
-  -r apps/decision_studio/requirements.txt pytest==9.1.1
+  -r apps/decision_studio/requirements.txt
 .venv-decision-studio/bin/python -m pip check
 
 # Uses the reviewed compact bundle; no private research artifacts required.
@@ -142,6 +144,15 @@ aggregate q10–q90 coverage does not guarantee per-station calibration.
 
 ## Verification and remaining work
 
+The current release has [successful post-merge Ubuntu QA](https://github.com/sanjeevani1193/CityPulse-AI/actions/runs/43211528431):
+**205 passed, 4 explicit private-source exclusions, zero failures/skips**, clean
+installation and real HTTP/WebSocket rendering of all five workspaces, curated
+SQL and a checksum-verified HTML download. The owner subsequently verified all
+five public workspaces anonymously. The detailed milestone measurements below
+preserve their historical phase-specific scope; they are not new research results.
+For local tests, first install `apps/decision_studio/requirements-dev.txt` into
+the isolated app environment; this is not required merely to launch the app.
+
 ```sh
 PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
   .venv-decision-studio/bin/python -m pytest tests/test_decision_studio.py -q
@@ -223,7 +234,7 @@ After pulling theme changes, stop your existing local Streamlit process with
 Ctrl-C and restart it using the command above. No Mac/browser restart is needed.
 The approved Milestone 2 foundation was committed locally as
 `8763cc97794918b4170dd79b06527a704c77eb8b`. Milestone 3 implementation is saved
-locally; its browser UI review remains pending.
+locally; its browser review was pending at that point and was subsequently approved.
 
 Milestone 3 implements Forecast Explorer using the prepared sequences, as
 described below. SQLPilot later needs **newly executed, labelled offline examples**:
@@ -238,9 +249,10 @@ Public hosting, any workflow changes and GCP retirement require separate review.
 
 ## Milestone 3: historical Forecast Explorer
 
-**Status: implemented and automatically tested; browser UI review is pending.**
-Real HTTP/WebSocket checks passed, but they do not replace visual inspection of
-the rendered Forecast Explorer. Review the browser UI before further development.
+**Status: implemented, automatically tested and owner-verified in the public app.**
+The original HTTP/WebSocket checks below did not replace browser inspection;
+subsequent user visual approval and incognito public checks supply that separate
+evidence. No agent-run screenshot verification is claimed.
 
 Select an exact station ID (nine available), then an available NYC-midnight
 forecast origin (three per station). The widget stores the **UTC ISO origin**;
@@ -309,10 +321,10 @@ PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=
 .venv-decision-studio/bin/python scripts/verify_decision_studio.py
 ```
 
-The real loopback smoke check now renders all three implemented workspaces,
-checks 24 distinct forecast timestamps and the TFT band, and stops its owned
-server. No heavy browser automation is necessary. Pixel-level visual review and
-public hosting remain separate; no deployment is claimed.
+At Milestone 3, the real loopback smoke check rendered the three then-implemented
+workspaces, checked 24 distinct timestamps and the TFT band, and stopped its owned
+server. Public hosting was not claimed by that check. Later owner approval and
+the public release supersede that milestone's pending browser/hosting status.
 
 Milestone 3 local verification: **75 tests passed, zero failures/skips** (49
 existing Decision Studio checks plus 26 Explorer checks), in 14.94 seconds.
@@ -496,8 +508,9 @@ four workspaces, clicked the SQL button and decoded its actual Arrow result
 `[{"starts":1998}]`. The owned server stopped cleanly. Its peak RSS was about
 173 MiB; the final test run sampled about 332 MiB owned peak RSS. Runs stayed
 within existing guards despite warning-level host memory pressure. No browser
-automation was attempted; the new SQLPilot browser UI review and public hosting
-remain pending. Dependency compatibility, source/output hashes, syntax, local
+automation was attempted; browser review and public hosting were pending at that
+milestone and have since been approved and verified by the owner. Dependency
+compatibility, source/output hashes, syntax, local
 Markdown links and whitespace checks passed. After the user's local functionality
 and visual approval, Milestone 4 was committed locally as
 `96d380d3354902f59cc93ef10937a00d51d7c440` with 155 tests passing again. No push or
@@ -505,7 +518,7 @@ merge was performed.
 
 ## Milestone 5: ExperimentLab & Methodology
 
-**Implemented offline; browser visual review is approved. Public hosting remains pending.**
+**Implemented offline; browser visual review and public access are owner-verified.**
 The original ExperimentLab engine, report, research files, forecasting results and
 SQLPilot bundle are preserved. This workspace displays saved evidence; it does not
 run a new experiment. The approved navy/teal/light-canvas theme is reused.
@@ -630,8 +643,10 @@ transformations, reject damaged provenance, enforce create-only exports, and
 exercise selectors and all five workspaces. The selected original research tests
 exclude simulation/regeneration cases intentionally. Real HTTP/WebSocket
 verification renders the actual local app and always stops its server; this is
-not a pixel-level browser review. Milestone 5 stays uncommitted for visual review;
-no public deployment, push, merge, GCP operation or external LLM call is included.
+not a pixel-level browser review. Milestone 5 was initially left uncommitted for
+review, then saved as `15afb7f` and merged through PR #2 as `4eda175`. Public access
+was subsequently verified by the owner. No GCP operation or external LLM call
+was part of this workspace's runtime or these automated checks.
 
 Measured Milestone 5 verification: **187 tests passed, zero failures/skips** in
 44.15 seconds across the four Decision Studio suites plus the original SQLPilot
@@ -644,7 +659,7 @@ workspaces rendered over Streamlit WebSockets. Saved CUPED effect/CI/p-value,
 24 forecast points and the real curated SQL result were verified. The server
 stopped cleanly after 3.14 seconds, with 181 MiB peak server RSS (264 MiB sampled
 combined verifier/server RSS); no host swap growth was observed during that check.
-The synthetic bundle adds only **25,049 bytes**. No pixel-level browser sign-off
-or current cloud availability is claimed. Original source/research checksums,
+The synthetic bundle adds only **25,049 bytes**. No agent-run pixel-level browser
+verification or current GCP availability is claimed. Original source/research checksums,
 protected bundles, dependency compatibility, syntax, local links and whitespace
 checks passed.
