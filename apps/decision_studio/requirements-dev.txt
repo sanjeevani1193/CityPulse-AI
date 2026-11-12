@@ -1,0 +1,4 @@
+-r requirements.txt
+pytest==9.1.1
+# Verification of saved inference only; the Streamlit runtime does not need SciPy.
+scipy==1.18.1

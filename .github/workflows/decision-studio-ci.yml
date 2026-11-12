@@ -1,0 +1,48 @@
+name: Decision Studio offline QA
+
+'on':
+  push:
+    branches: [main]
+    paths: ['apps/decision_studio/**', 'src/citypulse_ai/decision_studio/**', 'src/citypulse_ai/sqlpilot/core.py', 'src/citypulse_ai/experiments/**', 'tests/test_decision_studio*.py', 'tests/test_sqlpilot.py', 'tests/test_experimentlab.py', 'scripts/verify_decision_studio.py', 'docs/experimentlab_report.html', '.streamlit/config.toml', '.github/workflows/decision-studio-ci.yml']
+  pull_request:
+    branches: [main]
+    paths: ['apps/decision_studio/**', 'src/citypulse_ai/decision_studio/**', 'src/citypulse_ai/sqlpilot/core.py', 'src/citypulse_ai/experiments/**', 'tests/test_decision_studio*.py', 'tests/test_sqlpilot.py', 'tests/test_experimentlab.py', 'scripts/verify_decision_studio.py', 'docs/experimentlab_report.html', '.streamlit/config.toml', '.github/workflows/decision-studio-ci.yml']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: decision-studio-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  offline-app:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      PYTHONPATH: src
+      PYTHONDONTWRITEBYTECODE: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97
+        with:
+          python-version: '3.14'
+      - name: Install app and verification dependencies in a clean Linux environment
+        run: |
+          python -m pip install --only-binary=:all: -r apps/decision_studio/requirements-dev.txt
+          python -m pip check
+      - name: Test bundled evidence and all workspaces without private inputs
+        # Four exporter/source-equality checks require retained private local
+        # research inputs. Exclude explicitly, never download them in CI.
+        run: |
+          python -m pytest tests/test_decision_studio.py tests/test_decision_studio_explorer.py tests/test_decision_studio_sql.py tests/test_decision_studio_experiment.py tests/test_decision_studio_release.py tests/test_sqlpilot.py tests/test_experimentlab.py -q --tb=short \
+            --deselect tests/test_decision_studio.py::test_real_export_preserves_exact_rows_and_excludes_private_fields \
+            --deselect tests/test_decision_studio.py::test_deterministic_create_only_export \
+            --deselect tests/test_decision_studio.py::test_wrong_source_hash_fails_before_export \
+            --deselect tests/test_decision_studio_sql.py::test_original_source_projection_and_query_parity_if_sources_available
+      - name: Actual local HTTP, five-page rendering, SQL and report download
+        run: python scripts/verify_decision_studio.py

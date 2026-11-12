@@ -255,6 +255,11 @@ credentials.*
 # Isolated SQLPilot application environment
 .venv-sqlpilot*/
 
+# Isolated offline Decision Studio runtime and reviewed aggregate demo data.
+.venv-decision-studio/
+!apps/decision_studio/data/forecast_sequences.parquet
+!apps/decision_studio/sqlpilot_data/sample.duckdb
+
 # Terraform is local-only; commit the dependency lockfile, never state or plans.
 /infra/terraform/.terraform/
 /infra/terraform/*.tfstate

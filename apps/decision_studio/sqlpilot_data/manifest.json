@@ -1,0 +1,91 @@
+{
+  "duckdb_version": "1.5.6",
+  "format_version": "citypulse-curated-sql-v1",
+  "original_inputs": [
+    {
+      "filename": "202401-citibike-tripdata_1.csv",
+      "sampled_rows": 1000,
+      "sha256": "b849051498c4def2050df938eaae76d4e65fee5b651d47b84086f90fbd08b6dd"
+    },
+    {
+      "filename": "202401-citibike-tripdata_2.csv",
+      "sampled_rows": 1000,
+      "sha256": "cd10dcdbd658ccb41b6148c917f09e15c035b42477b854069590ef0d363467a4"
+    }
+  ],
+  "outputs": {
+    "evaluation.json": {
+      "sha256": "84d4b96574ebe3fb8bf02b76f98eebc8465bca0ce7e629e6c78757056f23abae",
+      "size_bytes": 3706
+    },
+    "queries.json": {
+      "sha256": "fb59b13e40387d34bbb07131fd034bff94fa08e5acf2b990e0018693bb0d7b12",
+      "size_bytes": 2649
+    },
+    "sample.duckdb": {
+      "sha256": "43c12b16dd84e38e6e7eba7c05c32ae4e2bc908a841dd3f14243f671e25bcfb8",
+      "size_bytes": 798720
+    }
+  },
+  "sample_rows": {
+    "hourly_rides": 1931,
+    "validated_trips": 1998
+  },
+  "schema": {
+    "hourly_rides": {
+      "columns": {
+        "hour_start": "TIMESTAMP WITH TIME ZONE",
+        "ride_count": "BIGINT",
+        "start_station_id": "VARCHAR"
+      },
+      "sample_rows": 1931
+    },
+    "validated_trips": {
+      "columns": {
+        "duration_seconds": "DOUBLE",
+        "end_station_id": "VARCHAR",
+        "ended_at": "TIMESTAMP WITH TIME ZONE",
+        "start_station_id": "VARCHAR",
+        "started_at": "TIMESTAMP WITH TIME ZONE"
+      },
+      "sample_rows": 1998
+    }
+  },
+  "scope": "First 1000 records of each of two January 2024 archive members; 2000 source rows, 1998 accepted, 2 rejected. Source-local dates can cross archive boundaries. Not full-history totals or physical demand.",
+  "source_period_utc": [
+    "2024-01-01T04:57:44.743000+00:00",
+    "2024-02-01T04:35:58.275000+00:00"
+  ],
+  "sources": {
+    "outputs/historical/samples/2024-01-n1000/citypulse.duckdb": {
+      "sha256": "7da6294c49e06f01cb91a669eea6538af6ec849da900e678cd85f3e1b68a8849",
+      "size_bytes": 798720
+    },
+    "outputs/historical/samples/2024-01-n1000/hourly_rides.parquet": {
+      "sha256": "24f79d9d4dcccac645bfe11e7fc652c4803cc491ff99f7673dfd5d2adb31c058",
+      "size_bytes": 13364
+    },
+    "outputs/historical/samples/2024-01-n1000/report.json": {
+      "sha256": "0bd12880aec89ba7ebd41c94a97af268d44f65b1107ed2c26b8febfe43785f6b",
+      "size_bytes": 2499
+    },
+    "outputs/historical/samples/2024-01-n1000/validated_trips.parquet": {
+      "sha256": "f506f3d07817ef95eac50320fd7c1cf69c47989c159a8f66120f1c2a85595571",
+      "size_bytes": 144196
+    },
+    "outputs/sqlpilot/groq-20b-live-evaluation.json": {
+      "sha256": "fede71da44031585ab1b1a6315849074a17708993ef2ccf24232ab875d8e5f00",
+      "size_bytes": 3705
+    },
+    "src/citypulse_ai/sqlpilot/core.py": {
+      "sha256": "c0f63ca97d31bfde7ba3eb46a61351a67da2fdd892f3898681928ecf69cd80a3",
+      "size_bytes": 9340
+    },
+    "tests/fixtures/sqlpilot_questions.json": {
+      "sha256": "0f5a5989d9b7cdbfa060ae7db3e3bc988011b27d01785b55517806006af62f1a",
+      "size_bytes": 2263
+    }
+  },
+  "transformation": "New physical tables containing only the original SQLPilot-permitted columns; values/types preserved. Drop ride IDs, source paths/row IDs, UTC-ns helper columns and unrelated views. No synthetic rows or model results.",
+  "verification": "Six curated queries agree with the original read-only database, including SQL NULL; not a new LLM evaluation."
+}
