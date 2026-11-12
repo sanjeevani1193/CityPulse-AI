@@ -98,7 +98,7 @@ def sidebar():
         st.markdown("**Saved evidence. No live backend.**")
         st.caption("Historical forecasts · accepted recorded starts · synthetic experimentation")
         st.markdown(f"[Repository]({REPOSITORY}) · [Methodology]({DOCS}six_model_followup_benchmark.md)")
-        st.caption("Explore forecasts, model comparisons and curated offline SQL. ExperimentLab is upcoming.")
+        st.caption("Explore forecasts, model comparisons, curated offline SQL and synthetic experiment evidence.")
     return choice
 
 

@@ -272,12 +272,12 @@ def test_streamlit_completed_workspaces_and_interactions():
 
 
 @pytest.mark.parametrize("workspace", ["ExperimentLab & Methodology"])
-def test_unimplemented_workspaces_are_explicit(workspace):
+def test_final_workspace_is_implemented_and_synthetic(workspace):
     app = AppTest.from_file(str(ENTRY), default_timeout=25).run()
     app.sidebar.radio[0].set_value(workspace).run()
     assert not app.exception
-    assert any("not implemented" in value.value for value in app.info)
-    assert len(app.dataframe) == 0
+    assert any("Fully synthetic" in value.value for value in app.warning)
+    assert len(app.dataframe) >= 2
 
 
 def test_app_missing_bundle_shows_safe_error(monkeypatch):

@@ -1,4 +1,4 @@
-"""Five-workspace navigation; four implemented offline workspaces."""
+"""Five implemented, independently verifiable offline workspaces."""
 import streamlit as st
 
 from .artifacts import ArtifactError, load_bundle
@@ -10,6 +10,10 @@ from .explorer import forecast_explorer
 def main():
     configure()
     workspace = sidebar()
+    if workspace == "ExperimentLab & Methodology":
+        from .experiment_workspace import experiment_workspace
+        experiment_workspace()
+        return
     if workspace == "SQLPilot":
         # Independent bundle: a forecasting artifact fault must not disable SQL.
         from .sql_workspace import sqlpilot_workspace

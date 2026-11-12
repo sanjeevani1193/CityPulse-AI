@@ -58,7 +58,7 @@ def overview(bundle):
         st.subheader("Start with the evidence")
         st.write("Use **Model Comparison** in the sidebar to rank methods, compare temporal splits and inspect saved error breakdowns.")
         st.markdown(f"[Repository & reproducibility]({REPOSITORY})  \n[Forecast methodology]({DOCS}final_tft_dataset.md)  \n[Cloud engineering evidence]({DOCS}cloudrun_cd.md)  \n[Synthetic experiment report]({DOCS}experimentlab_report.html)")
-        st.caption("Forecast Explorer shows saved historical windows; SQLPilot executes curated offline SQL. ExperimentLab's interactive workspace is upcoming.")
+        st.caption("Forecast Explorer shows saved historical windows; SQLPilot executes curated offline SQL; ExperimentLab explores saved synthetic evidence.")
     provenance(bundle)
 
 

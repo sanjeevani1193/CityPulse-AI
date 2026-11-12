@@ -1,8 +1,8 @@
-# CityPulse Decision Studio - offline presentation, Milestones 2-4
+# CityPulse Decision Studio - offline presentation, Milestones 2-5
 
 This is a separate Streamlit + Plotly presentation of **saved** CityPulse results.
-Overview, Forecast Explorer, Model Comparison and curated SQLPilot are implemented.
-ExperimentLab & Methodology is visibly labelled upcoming, not a functional page.
+All five workspaces are implemented: Overview, Forecast Explorer, Model Comparison,
+curated SQLPilot, and ExperimentLab & Methodology. Milestone 5 awaits browser visual review.
 It is not publicly hosted yet and does not perform live forecasts, LLM calls or
 statistical experiments. SQLPilot executes only fixed local reference queries.
 GCP backup/retirement is a separate task.
@@ -43,7 +43,9 @@ and their environments alone. This environment is local and gitignored.
 | `artifacts.py` | Fixed filenames, version/schema/hash checks, exact elapsed-hour sequence validation; fail closed |
 | `metrics.py` | Paired error formulas, baseline-relative improvement, selected-model rankings |
 | `charts.py` | Plotly figures; receives validated saved summaries, not model objects |
-| `ui.py`, `workspaces.py`, `app.py` | Shared presentation, routing, overview/comparison and explicit upcoming pages |
+| `ui.py`, `workspaces.py`, `app.py` | Shared presentation, five-workspace routing and overview/comparison |
+| `experiment_data.py`, `experiment_charts.py`, `experiment_workspace.py` | Saved synthetic evidence validation, statistical visualizations and Methodology UI |
+| `scripts/build_experiment_demo.py` | Create-only, byte-identical export of existing synthetic research JSON |
 | `forecasts.py`, `explorer.py` | Exact saved sequence selection, descriptive errors and Forecast Explorer UI |
 | `sql_demo.py`, `sql_demo_worker.py`, `sql_workspace.py` | Fixed query IDs, bounded read-only worker and curated SQL UI |
 | `sql_export.py`, `scripts/build_sqlpilot_demo.py` | Create-only projection of the actual analytical sample and reference verification |
@@ -146,9 +148,9 @@ PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=
 git diff --check
 ```
 
-AppTest checks both completed workspaces, controls, empty selection, upcoming
-pages and fail-closed missing-artifact behavior. The loopback smoke test checks
-HTTP health/root and renders both pages over real Streamlit WebSockets, then
+AppTest checks all five completed workspaces, controls, empty selection and
+fail-closed missing-artifact behavior. The loopback smoke test checks
+HTTP health/root and renders all five pages over real Streamlit WebSockets, then
 stops the owned server. Neither test is an LLM evaluation or model inference.
 Browser screenshots and real Community Cloud hosting are not claimed.
 
@@ -226,7 +228,7 @@ Milestone 3 implements Forecast Explorer using the prepared sequences, as
 described below. SQLPilot later needs **newly executed, labelled offline examples**:
 its original live report has statuses but no saved generated SQL/results. Never
 invent those traces or substitute synthetic fixture answers for real sample data.
-ExperimentLab's later workspace will reuse saved synthetic results and caveats.
+Milestone 5 below now presents the saved synthetic results and caveats.
 
 No deployment workflow was edited. No push/merge is part of this milestone. New
 Decision Studio files are outside the existing Cloud Run deployment path filters;
@@ -244,7 +246,8 @@ forecast origin (three per station). The widget stores the **UTC ISO origin**;
 formatting it in NYC time does not change the key. Select any of the six methods,
 switch timestamp labels between NYC offsets and UTC, and optionally display the
 saved TFT q10-q90 band. Empty method selection displays actuals only, with a
-warning and no fabricated model scores. SQLPilot/ExperimentLab remain placeholders.
+warning and no fabricated model scores. SQLPilot and ExperimentLab are implemented
+in their own subsequent milestones below.
 
 `load_bundle()` verifies the same unchanged four-file bundle and returns its
 already-validated forecast rows. `available_origins()` and `select_sequence()`
@@ -494,5 +497,153 @@ four workspaces, clicked the SQL button and decoded its actual Arrow result
 within existing guards despite warning-level host memory pressure. No browser
 automation was attempted; the new SQLPilot browser UI review and public hosting
 remain pending. Dependency compatibility, source/output hashes, syntax, local
-Markdown links and whitespace checks passed. All changes remain uncommitted for
-visual review on `feature/citypulse-decision-studio`.
+Markdown links and whitespace checks passed. After the user's local functionality
+and visual approval, Milestone 4 was committed locally as
+`96d380d3354902f59cc93ef10937a00d51d7c440` with 155 tests passing again. No push or
+merge was performed.
+
+## Milestone 5: ExperimentLab & Methodology
+
+**Implemented offline; browser visual review and public hosting remain pending.**
+The original ExperimentLab engine, report, research files, forecasting results and
+SQLPilot bundle are preserved. This workspace displays saved evidence; it does not
+run a new experiment. The approved navy/teal/light-canvas theme is reused.
+
+### Frozen study and provenance
+
+The canonical source is
+`outputs/experimentlab/release-20261030-final/experiment.json` (23,654 bytes), SHA-256
+`fefe5b941ed2a7618b221cf51db9a3c7fccc195cb36ac0016f5fac01135ba527`.
+Its checksum matches the original `checksums.json`; the original HTML matches
+the tracked [report](experimentlab_report.html), SHA-256
+`fd6cf75c44b7237b76589ba01800807ac234c9a62cd4d6eaf641bf40b8c1ce4b`.
+`apps/decision_studio/experiment_data/experiment.json` is a **byte-identical** copy.
+The adjacent manifest records relative source identities, hashes, sizes, copy
+semantics and limitations. The small synthetic records are safe demonstration
+artifacts, not a historical-data export. Checksums establish consistency with the
+repository's receipts, not an external authenticity signature.
+
+The create-only exporter can reproduce the bundle **only when the retained
+canonical local inputs exist**; a fresh clone uses the bundled files directly:
+
+```sh
+PYTHONPATH=src .venv-decision-studio/bin/python scripts/build_experiment_demo.py \
+  --output outputs/decision-studio-experiment-copy
+```
+
+The loader enforces size limits, fixed names, source identities, SHA-256,
+non-symlink files, finite results, balanced unique synthetic station units,
+disjoint calibration/baseline/post periods, and saved effect/SE/df algebra.
+Missing/corrupt evidence produces a safe error, not invented results. The page
+loads independently of the forecasting and SQL bundles. The HTML download is
+enabled only when its checksum matches.
+
+### What the study tests
+
+A hypothetical redistribution intervention adds +3 starts per station/day in
+the simulated treatment arm. Outcome totals come from a fixed-seed synthetic
+Poisson process with heterogeneous, stable latent station rates. `seed=2026`
+governs simulation; a separate `assignment_seed=42` shuffles 100 SIM station IDs,
+assigning 50 to treatment and 50 to control. These are **not** the forecasting
+station IDs. The independent unit is a station; the outcome is its mean starts
+over 28 local-calendar-days. Days are not treated as 2,800 independent units.
+The estimand is the station-average intention-to-treat difference in post means.
+
+| Saved estimator | Effect | SE | 95% Welch CI | Two-sided p |
+|---|---:|---:|---|---:|
+| Unadjusted sensitivity | +2.8086 | 6.5002 | [-10.0947, 15.7118] | 0.66666 |
+| Pre-calibrated CUPED primary | +2.7531 | 0.5208 | [1.7190, 3.7871] | 8.03e-7 |
+
+Welch estimates `mean(T)-mean(C)`, with
+`SE = sqrt(s_T²/n_T + s_C²/n_C)` and Satterthwaite degrees of freedom. It allows
+unequal arm variances; station independence, randomization, no interference and
+a suitable sampling approximation still matter. The frequentist 95% procedure
+would cover the fixed true effect in about 95% of repeated studies under its
+assumptions. This does not assign 95% probability to the particular realized
+interval and is not a prediction interval for individual future observations.
+
+CUPED uses `Y_adjusted = Y - theta*(X-mean(X))`. Frozen theta **1.009154** was
+fitted from two earlier nonoverlapping periods before assignment/post outcomes;
+the later pre-assignment baseline is X. This app only transforms saved station
+records using that coefficient. It never refits it. Earlier calibration unit
+records and an exact original implementation hash are absent from the source
+JSON: the saved coefficient/fit scope can be preserved, but its original fit
+cannot be independently reconstructed here. The **99.358%** effect-estimator
+variance reduction depends on this unusually stable synthetic process.
+
+The primary conclusion remains **statistically positive but practical threshold
+uncertain**: the interval excludes zero but includes effects smaller than the
+predeclared +2 threshold. Neither switching the display estimator nor choosing
+the narrower interval changes the pre-specified primary analysis.
+
+### Meaningful controls and planning
+
+- Select CUPED or unadjusted effects; show one or both saved uncertainty intervals.
+- Filter treatment/control station records and compare observed versus adjusted
+  station means. Adjusted means are statistical quantities, not new ride counts.
+- Select saved planning power or MDE; inspect the underlying values and assumptions.
+- Expand confidence-interval explanations, pre-period provenance, saved Monte
+  Carlo checks, and broader CityPulse methodology; download the original report.
+
+At 50 stations/arm, alpha .05 and practical effect +2, pre-treatment SD planning
+gives raw power **6.033%**, MDE **18.7193**, and **4,296 stations/arm** for 80% power;
+CUPED gives **98.558%**, MDE **1.3516**, and **24 stations/arm**. These are approximate
+equal-variance noncentral-t planning results from frozen pre-treatment SDs, not
+post-hoc observed power. Increasing independent sample size generally improves
+power and reduces the minimum detectable effect. Saved simulation checks have
+only 200 repetitions/scenario; 200/200 detections does not prove perfect power.
+No new scenarios, sliders, random draws or simulation batches are introduced.
+
+Methodology expanders connect historical ETL, accepted-record label policy,
+train-only station selection/scalers, UTC/DST-aware splits, six forecasting
+methods, SQLPilot's LangGraph/MCP architecture and synthetic ExperimentLab.
+FastAPI/Docker, Terraform, WIF and GitHub Actions/Cloud Run are described as
+**historical verified engineering evidence**, not a claim that GCP is currently
+active. The public-facing offline app checks no cloud services.
+
+### Implementation and verification commands
+
+`experiment_data.py` validates evidence and computes only display transformations
+and algebra. `experiment_charts.py` plots saved estimates/error bars and planning
+values. `experiment_workspace.py` binds selectors to those views. No model,
+SciPy or cloud runtime is required; the unchanged six-package runtime file remains
+sufficient. SciPy is a **development-only** dependency for independently checking
+saved inference against the research engine; no simulations are called.
+
+```sh
+.venv-decision-studio/bin/python -m pip install --only-binary=:all: \
+  -r apps/decision_studio/requirements-dev.txt
+PYTHONPATH=src PYTHONDONTWRITEBYTECODE=1 OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 \
+  .venv-decision-studio/bin/python -m pytest tests/test_decision_studio.py \
+  tests/test_decision_studio_explorer.py tests/test_decision_studio_sql.py \
+  tests/test_decision_studio_experiment.py tests/test_sqlpilot.py -q
+PYTHONPATH=src .venv-decision-studio/bin/python -m pytest tests/test_experimentlab.py \
+  -k 'welch_matches or power_null or inference_rejects' -q
+.venv-decision-studio/bin/python scripts/verify_decision_studio.py
+git diff --check
+```
+
+Tests compare saved station records with independent Welch equations and existing
+SciPy inference, reproduce planning from frozen SDs, check assignment and CUPED
+transformations, reject damaged provenance, enforce create-only exports, and
+exercise selectors and all five workspaces. The selected original research tests
+exclude simulation/regeneration cases intentionally. Real HTTP/WebSocket
+verification renders the actual local app and always stops its server; this is
+not a pixel-level browser review. Milestone 5 stays uncommitted for visual review;
+no public deployment, push, merge, GCP operation or external LLM call is included.
+
+Measured Milestone 5 verification: **187 tests passed, zero failures/skips** in
+44.15 seconds across the four Decision Studio suites plus the original SQLPilot
+core. **Three original statistical tests passed, 16 simulation-related tests
+were deliberately deselected**. The combined test process tree sampled about
+334 MiB peak RSS; host-wide swap use rose about 45 MiB during that run, with no
+claim that the test caused it. Warning-level host memory pressure remained
+unchanged and no guard fired. Actual HTTP root/health returned 200 and all five
+workspaces rendered over Streamlit WebSockets. Saved CUPED effect/CI/p-value,
+24 forecast points and the real curated SQL result were verified. The server
+stopped cleanly after 3.14 seconds, with 181 MiB peak server RSS (264 MiB sampled
+combined verifier/server RSS); no host swap growth was observed during that check.
+The synthetic bundle adds only **25,049 bytes**. No pixel-level browser sign-off
+or current cloud availability is claimed. Original source/research checksums,
+protected bundles, dependency compatibility, syntax, local links and whitespace
+checks passed.

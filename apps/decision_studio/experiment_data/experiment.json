@@ -1,0 +1,855 @@
+{
+  "version": "experimentlab-redistribution-v1",
+  "data_kind": "fully synthetic; no historical observations",
+  "design": {
+    "stations": 100,
+    "days": 28,
+    "effect": 3.0,
+    "practical_threshold": 2.0,
+    "seed": 2026,
+    "assignment_seed": 42,
+    "alpha": 0.05
+  },
+  "primary_estimator": "pre-calibrated CUPED Welch difference in station means",
+  "estimand": "station-average intention-to-treat effect in starts/station/local-calendar-day over fixed post period",
+  "periods": {
+    "calibration_x": [
+      0,
+      28
+    ],
+    "calibration_y": [
+      28,
+      56
+    ],
+    "baseline": [
+      56,
+      84
+    ],
+    "post": [
+      84,
+      112
+    ]
+  },
+  "calibration": {
+    "theta": 1.0091544535395638,
+    "calibration_sd": 33.07979646145285,
+    "calibration_adjusted_sd": 2.388419700582569,
+    "fit_scope": "pre_period_1 -> pre_period_2; before assignment and outcome"
+  },
+  "balance": {
+    "treatment_n": 50,
+    "control_n": 50,
+    "treatment_mean": 81.99857142857144,
+    "control_mean": 81.94357142857142,
+    "treatment_sd": 30.641254927632964,
+    "control_sd": 35.95136477833963,
+    "effect": 0.05500000000002103,
+    "standard_error": 6.680399887679526,
+    "ci_low": -13.206198582328973,
+    "ci_high": 13.316198582329015,
+    "p_value": 0.9934482150102348,
+    "df": 95.59915881217978,
+    "significant": false,
+    "standardized_mean_difference": 0.0016466080152314235
+  },
+  "unadjusted": {
+    "treatment_n": 50,
+    "control_n": 50,
+    "treatment_mean": 84.635,
+    "control_mean": 81.82642857142856,
+    "treatment_sd": 29.88608656270204,
+    "control_sd": 34.920491897640524,
+    "effect": 2.8085714285714403,
+    "standard_error": 6.500182958050484,
+    "ci_low": -10.094676419978963,
+    "ci_high": 15.711819277121844,
+    "p_value": 0.666658163540819,
+    "df": 95.71712640859786,
+    "significant": false,
+    "relative_lift_percent": 3.4323524533638423
+  },
+  "cuped": {
+    "treatment_n": 50,
+    "control_n": 50,
+    "treatment_mean": 84.60724825252768,
+    "control_mean": 81.85418031890092,
+    "treatment_sd": 2.3395785652718493,
+    "control_sd": 2.8443465044022416,
+    "effect": 2.7530679336267667,
+    "standard_error": 0.5208442166365052,
+    "ci_low": 1.7189885471754471,
+    "ci_high": 3.7871473200780863,
+    "p_value": 8.031800213779361e-07,
+    "df": 94.48369583407874,
+    "significant": true
+  },
+  "variance_reduction_fraction": 0.9935795638562713,
+  "planning_raw": {
+    "sd_source": "pre-treatment calibration only",
+    "sd": 33.07979646145285,
+    "n_per_arm": 50,
+    "target_effect": 2.0,
+    "target_power": 0.8,
+    "power": 0.06032729378503841,
+    "mde": 18.71926944458427,
+    "required_stations_per_arm": 4296,
+    "assumption": "equal independent station variances; approximate noncentral t planning, not observed power"
+  },
+  "planning_cuped": {
+    "sd_source": "pre-treatment calibration only",
+    "sd": 2.388419700582569,
+    "n_per_arm": 50,
+    "target_effect": 2.0,
+    "target_power": 0.8,
+    "power": 0.9855753612383724,
+    "mde": 1.3515642991956542,
+    "required_stations_per_arm": 24,
+    "assumption": "equal independent station variances; approximate noncentral t planning, not observed power"
+  },
+  "conclusion": "statistically positive but practical threshold uncertain",
+  "station_records": [
+    {
+      "station_id": "SIM0000",
+      "treated": true,
+      "baseline_daily_starts": 56.32142857142857,
+      "post_total_starts": 1628,
+      "post_daily_starts": 58.142857142857146
+    },
+    {
+      "station_id": "SIM0001",
+      "treated": true,
+      "baseline_daily_starts": 81.92857142857143,
+      "post_total_starts": 2442,
+      "post_daily_starts": 87.21428571428571
+    },
+    {
+      "station_id": "SIM0002",
+      "treated": true,
+      "baseline_daily_starts": 39.964285714285715,
+      "post_total_starts": 1174,
+      "post_daily_starts": 41.92857142857143
+    },
+    {
+      "station_id": "SIM0003",
+      "treated": true,
+      "baseline_daily_starts": 123.57142857142857,
+      "post_total_starts": 3585,
+      "post_daily_starts": 128.03571428571428
+    },
+    {
+      "station_id": "SIM0004",
+      "treated": true,
+      "baseline_daily_starts": 93.28571428571429,
+      "post_total_starts": 2673,
+      "post_daily_starts": 95.46428571428571
+    },
+    {
+      "station_id": "SIM0005",
+      "treated": true,
+      "baseline_daily_starts": 67.10714285714286,
+      "post_total_starts": 1951,
+      "post_daily_starts": 69.67857142857143
+    },
+    {
+      "station_id": "SIM0006",
+      "treated": false,
+      "baseline_daily_starts": 68.67857142857143,
+      "post_total_starts": 1881,
+      "post_daily_starts": 67.17857142857143
+    },
+    {
+      "station_id": "SIM0007",
+      "treated": true,
+      "baseline_daily_starts": 83.53571428571429,
+      "post_total_starts": 2404,
+      "post_daily_starts": 85.85714285714286
+    },
+    {
+      "station_id": "SIM0008",
+      "treated": false,
+      "baseline_daily_starts": 67.57142857142857,
+      "post_total_starts": 1947,
+      "post_daily_starts": 69.53571428571429
+    },
+    {
+      "station_id": "SIM0009",
+      "treated": false,
+      "baseline_daily_starts": 68.71428571428571,
+      "post_total_starts": 1953,
+      "post_daily_starts": 69.75
+    },
+    {
+      "station_id": "SIM0010",
+      "treated": true,
+      "baseline_daily_starts": 94.85714285714286,
+      "post_total_starts": 2773,
+      "post_daily_starts": 99.03571428571429
+    },
+    {
+      "station_id": "SIM0011",
+      "treated": false,
+      "baseline_daily_starts": 91.60714285714286,
+      "post_total_starts": 2477,
+      "post_daily_starts": 88.46428571428571
+    },
+    {
+      "station_id": "SIM0012",
+      "treated": false,
+      "baseline_daily_starts": 73.17857142857143,
+      "post_total_starts": 2030,
+      "post_daily_starts": 72.5
+    },
+    {
+      "station_id": "SIM0013",
+      "treated": false,
+      "baseline_daily_starts": 73.0,
+      "post_total_starts": 2049,
+      "post_daily_starts": 73.17857142857143
+    },
+    {
+      "station_id": "SIM0014",
+      "treated": false,
+      "baseline_daily_starts": 78.03571428571429,
+      "post_total_starts": 2238,
+      "post_daily_starts": 79.92857142857143
+    },
+    {
+      "station_id": "SIM0015",
+      "treated": false,
+      "baseline_daily_starts": 60.42857142857143,
+      "post_total_starts": 1698,
+      "post_daily_starts": 60.642857142857146
+    },
+    {
+      "station_id": "SIM0016",
+      "treated": false,
+      "baseline_daily_starts": 67.89285714285714,
+      "post_total_starts": 1860,
+      "post_daily_starts": 66.42857142857143
+    },
+    {
+      "station_id": "SIM0017",
+      "treated": true,
+      "baseline_daily_starts": 92.78571428571429,
+      "post_total_starts": 2589,
+      "post_daily_starts": 92.46428571428571
+    },
+    {
+      "station_id": "SIM0018",
+      "treated": true,
+      "baseline_daily_starts": 72.28571428571429,
+      "post_total_starts": 2032,
+      "post_daily_starts": 72.57142857142857
+    },
+    {
+      "station_id": "SIM0019",
+      "treated": false,
+      "baseline_daily_starts": 47.25,
+      "post_total_starts": 1351,
+      "post_daily_starts": 48.25
+    },
+    {
+      "station_id": "SIM0020",
+      "treated": false,
+      "baseline_daily_starts": 63.357142857142854,
+      "post_total_starts": 1782,
+      "post_daily_starts": 63.642857142857146
+    },
+    {
+      "station_id": "SIM0021",
+      "treated": true,
+      "baseline_daily_starts": 93.82142857142857,
+      "post_total_starts": 2740,
+      "post_daily_starts": 97.85714285714286
+    },
+    {
+      "station_id": "SIM0022",
+      "treated": false,
+      "baseline_daily_starts": 65.82142857142857,
+      "post_total_starts": 1993,
+      "post_daily_starts": 71.17857142857143
+    },
+    {
+      "station_id": "SIM0023",
+      "treated": false,
+      "baseline_daily_starts": 71.53571428571429,
+      "post_total_starts": 1926,
+      "post_daily_starts": 68.78571428571429
+    },
+    {
+      "station_id": "SIM0024",
+      "treated": true,
+      "baseline_daily_starts": 95.57142857142857,
+      "post_total_starts": 2718,
+      "post_daily_starts": 97.07142857142857
+    },
+    {
+      "station_id": "SIM0025",
+      "treated": true,
+      "baseline_daily_starts": 143.71428571428572,
+      "post_total_starts": 4056,
+      "post_daily_starts": 144.85714285714286
+    },
+    {
+      "station_id": "SIM0026",
+      "treated": true,
+      "baseline_daily_starts": 60.92857142857143,
+      "post_total_starts": 1743,
+      "post_daily_starts": 62.25
+    },
+    {
+      "station_id": "SIM0027",
+      "treated": true,
+      "baseline_daily_starts": 122.46428571428571,
+      "post_total_starts": 3501,
+      "post_daily_starts": 125.03571428571429
+    },
+    {
+      "station_id": "SIM0028",
+      "treated": true,
+      "baseline_daily_starts": 48.785714285714285,
+      "post_total_starts": 1455,
+      "post_daily_starts": 51.964285714285715
+    },
+    {
+      "station_id": "SIM0029",
+      "treated": true,
+      "baseline_daily_starts": 78.46428571428571,
+      "post_total_starts": 2249,
+      "post_daily_starts": 80.32142857142857
+    },
+    {
+      "station_id": "SIM0030",
+      "treated": false,
+      "baseline_daily_starts": 49.42857142857143,
+      "post_total_starts": 1416,
+      "post_daily_starts": 50.57142857142857
+    },
+    {
+      "station_id": "SIM0031",
+      "treated": false,
+      "baseline_daily_starts": 119.57142857142857,
+      "post_total_starts": 3490,
+      "post_daily_starts": 124.64285714285714
+    },
+    {
+      "station_id": "SIM0032",
+      "treated": false,
+      "baseline_daily_starts": 100.10714285714286,
+      "post_total_starts": 2849,
+      "post_daily_starts": 101.75
+    },
+    {
+      "station_id": "SIM0033",
+      "treated": true,
+      "baseline_daily_starts": 110.57142857142857,
+      "post_total_starts": 3059,
+      "post_daily_starts": 109.25
+    },
+    {
+      "station_id": "SIM0034",
+      "treated": false,
+      "baseline_daily_starts": 56.214285714285715,
+      "post_total_starts": 1596,
+      "post_daily_starts": 57.0
+    },
+    {
+      "station_id": "SIM0035",
+      "treated": false,
+      "baseline_daily_starts": 96.0,
+      "post_total_starts": 2670,
+      "post_daily_starts": 95.35714285714286
+    },
+    {
+      "station_id": "SIM0036",
+      "treated": false,
+      "baseline_daily_starts": 64.78571428571429,
+      "post_total_starts": 1682,
+      "post_daily_starts": 60.07142857142857
+    },
+    {
+      "station_id": "SIM0037",
+      "treated": true,
+      "baseline_daily_starts": 63.214285714285715,
+      "post_total_starts": 1868,
+      "post_daily_starts": 66.71428571428571
+    },
+    {
+      "station_id": "SIM0038",
+      "treated": true,
+      "baseline_daily_starts": 88.10714285714286,
+      "post_total_starts": 2556,
+      "post_daily_starts": 91.28571428571429
+    },
+    {
+      "station_id": "SIM0039",
+      "treated": true,
+      "baseline_daily_starts": 103.17857142857143,
+      "post_total_starts": 2878,
+      "post_daily_starts": 102.78571428571429
+    },
+    {
+      "station_id": "SIM0040",
+      "treated": true,
+      "baseline_daily_starts": 81.17857142857143,
+      "post_total_starts": 2349,
+      "post_daily_starts": 83.89285714285714
+    },
+    {
+      "station_id": "SIM0041",
+      "treated": false,
+      "baseline_daily_starts": 59.964285714285715,
+      "post_total_starts": 1712,
+      "post_daily_starts": 61.142857142857146
+    },
+    {
+      "station_id": "SIM0042",
+      "treated": true,
+      "baseline_daily_starts": 58.32142857142857,
+      "post_total_starts": 1707,
+      "post_daily_starts": 60.964285714285715
+    },
+    {
+      "station_id": "SIM0043",
+      "treated": false,
+      "baseline_daily_starts": 129.96428571428572,
+      "post_total_starts": 3492,
+      "post_daily_starts": 124.71428571428571
+    },
+    {
+      "station_id": "SIM0044",
+      "treated": false,
+      "baseline_daily_starts": 93.71428571428571,
+      "post_total_starts": 2641,
+      "post_daily_starts": 94.32142857142857
+    },
+    {
+      "station_id": "SIM0045",
+      "treated": true,
+      "baseline_daily_starts": 95.5,
+      "post_total_starts": 2765,
+      "post_daily_starts": 98.75
+    },
+    {
+      "station_id": "SIM0046",
+      "treated": true,
+      "baseline_daily_starts": 163.82142857142858,
+      "post_total_starts": 4548,
+      "post_daily_starts": 162.42857142857142
+    },
+    {
+      "station_id": "SIM0047",
+      "treated": false,
+      "baseline_daily_starts": 58.857142857142854,
+      "post_total_starts": 1593,
+      "post_daily_starts": 56.892857142857146
+    },
+    {
+      "station_id": "SIM0048",
+      "treated": false,
+      "baseline_daily_starts": 187.64285714285714,
+      "post_total_starts": 5082,
+      "post_daily_starts": 181.5
+    },
+    {
+      "station_id": "SIM0049",
+      "treated": false,
+      "baseline_daily_starts": 230.0,
+      "post_total_starts": 6220,
+      "post_daily_starts": 222.14285714285714
+    },
+    {
+      "station_id": "SIM0050",
+      "treated": true,
+      "baseline_daily_starts": 135.25,
+      "post_total_starts": 3705,
+      "post_daily_starts": 132.32142857142858
+    },
+    {
+      "station_id": "SIM0051",
+      "treated": true,
+      "baseline_daily_starts": 98.89285714285714,
+      "post_total_starts": 2900,
+      "post_daily_starts": 103.57142857142857
+    },
+    {
+      "station_id": "SIM0052",
+      "treated": true,
+      "baseline_daily_starts": 59.57142857142857,
+      "post_total_starts": 1775,
+      "post_daily_starts": 63.392857142857146
+    },
+    {
+      "station_id": "SIM0053",
+      "treated": false,
+      "baseline_daily_starts": 107.07142857142857,
+      "post_total_starts": 2939,
+      "post_daily_starts": 104.96428571428571
+    },
+    {
+      "station_id": "SIM0054",
+      "treated": false,
+      "baseline_daily_starts": 64.96428571428571,
+      "post_total_starts": 1815,
+      "post_daily_starts": 64.82142857142857
+    },
+    {
+      "station_id": "SIM0055",
+      "treated": false,
+      "baseline_daily_starts": 75.10714285714286,
+      "post_total_starts": 2049,
+      "post_daily_starts": 73.17857142857143
+    },
+    {
+      "station_id": "SIM0056",
+      "treated": true,
+      "baseline_daily_starts": 65.0,
+      "post_total_starts": 2022,
+      "post_daily_starts": 72.21428571428571
+    },
+    {
+      "station_id": "SIM0057",
+      "treated": true,
+      "baseline_daily_starts": 81.71428571428571,
+      "post_total_starts": 2430,
+      "post_daily_starts": 86.78571428571429
+    },
+    {
+      "station_id": "SIM0058",
+      "treated": false,
+      "baseline_daily_starts": 118.75,
+      "post_total_starts": 3361,
+      "post_daily_starts": 120.03571428571429
+    },
+    {
+      "station_id": "SIM0059",
+      "treated": true,
+      "baseline_daily_starts": 61.714285714285715,
+      "post_total_starts": 1845,
+      "post_daily_starts": 65.89285714285714
+    },
+    {
+      "station_id": "SIM0060",
+      "treated": false,
+      "baseline_daily_starts": 53.714285714285715,
+      "post_total_starts": 1560,
+      "post_daily_starts": 55.714285714285715
+    },
+    {
+      "station_id": "SIM0061",
+      "treated": true,
+      "baseline_daily_starts": 52.57142857142857,
+      "post_total_starts": 1491,
+      "post_daily_starts": 53.25
+    },
+    {
+      "station_id": "SIM0062",
+      "treated": false,
+      "baseline_daily_starts": 51.82142857142857,
+      "post_total_starts": 1572,
+      "post_daily_starts": 56.142857142857146
+    },
+    {
+      "station_id": "SIM0063",
+      "treated": true,
+      "baseline_daily_starts": 47.75,
+      "post_total_starts": 1412,
+      "post_daily_starts": 50.42857142857143
+    },
+    {
+      "station_id": "SIM0064",
+      "treated": false,
+      "baseline_daily_starts": 54.964285714285715,
+      "post_total_starts": 1516,
+      "post_daily_starts": 54.142857142857146
+    },
+    {
+      "station_id": "SIM0065",
+      "treated": false,
+      "baseline_daily_starts": 118.85714285714286,
+      "post_total_starts": 3367,
+      "post_daily_starts": 120.25
+    },
+    {
+      "station_id": "SIM0066",
+      "treated": false,
+      "baseline_daily_starts": 61.607142857142854,
+      "post_total_starts": 1703,
+      "post_daily_starts": 60.82142857142857
+    },
+    {
+      "station_id": "SIM0067",
+      "treated": false,
+      "baseline_daily_starts": 83.39285714285714,
+      "post_total_starts": 2301,
+      "post_daily_starts": 82.17857142857143
+    },
+    {
+      "station_id": "SIM0068",
+      "treated": true,
+      "baseline_daily_starts": 48.714285714285715,
+      "post_total_starts": 1524,
+      "post_daily_starts": 54.42857142857143
+    },
+    {
+      "station_id": "SIM0069",
+      "treated": false,
+      "baseline_daily_starts": 77.25,
+      "post_total_starts": 2256,
+      "post_daily_starts": 80.57142857142857
+    },
+    {
+      "station_id": "SIM0070",
+      "treated": true,
+      "baseline_daily_starts": 41.392857142857146,
+      "post_total_starts": 1222,
+      "post_daily_starts": 43.642857142857146
+    },
+    {
+      "station_id": "SIM0071",
+      "treated": true,
+      "baseline_daily_starts": 56.57142857142857,
+      "post_total_starts": 1736,
+      "post_daily_starts": 62.0
+    },
+    {
+      "station_id": "SIM0072",
+      "treated": false,
+      "baseline_daily_starts": 162.89285714285714,
+      "post_total_starts": 4582,
+      "post_daily_starts": 163.64285714285714
+    },
+    {
+      "station_id": "SIM0073",
+      "treated": false,
+      "baseline_daily_starts": 62.5,
+      "post_total_starts": 1794,
+      "post_daily_starts": 64.07142857142857
+    },
+    {
+      "station_id": "SIM0074",
+      "treated": false,
+      "baseline_daily_starts": 115.35714285714286,
+      "post_total_starts": 3131,
+      "post_daily_starts": 111.82142857142857
+    },
+    {
+      "station_id": "SIM0075",
+      "treated": false,
+      "baseline_daily_starts": 88.57142857142857,
+      "post_total_starts": 2479,
+      "post_daily_starts": 88.53571428571429
+    },
+    {
+      "station_id": "SIM0076",
+      "treated": true,
+      "baseline_daily_starts": 72.78571428571429,
+      "post_total_starts": 2082,
+      "post_daily_starts": 74.35714285714286
+    },
+    {
+      "station_id": "SIM0077",
+      "treated": false,
+      "baseline_daily_starts": 61.25,
+      "post_total_starts": 1651,
+      "post_daily_starts": 58.964285714285715
+    },
+    {
+      "station_id": "SIM0078",
+      "treated": true,
+      "baseline_daily_starts": 117.67857142857143,
+      "post_total_starts": 3456,
+      "post_daily_starts": 123.42857142857143
+    },
+    {
+      "station_id": "SIM0079",
+      "treated": true,
+      "baseline_daily_starts": 72.25,
+      "post_total_starts": 2155,
+      "post_daily_starts": 76.96428571428571
+    },
+    {
+      "station_id": "SIM0080",
+      "treated": true,
+      "baseline_daily_starts": 128.96428571428572,
+      "post_total_starts": 3708,
+      "post_daily_starts": 132.42857142857142
+    },
+    {
+      "station_id": "SIM0081",
+      "treated": true,
+      "baseline_daily_starts": 57.142857142857146,
+      "post_total_starts": 1641,
+      "post_daily_starts": 58.607142857142854
+    },
+    {
+      "station_id": "SIM0082",
+      "treated": false,
+      "baseline_daily_starts": 75.14285714285714,
+      "post_total_starts": 2216,
+      "post_daily_starts": 79.14285714285714
+    },
+    {
+      "station_id": "SIM0083",
+      "treated": false,
+      "baseline_daily_starts": 88.92857142857143,
+      "post_total_starts": 2514,
+      "post_daily_starts": 89.78571428571429
+    },
+    {
+      "station_id": "SIM0084",
+      "treated": true,
+      "baseline_daily_starts": 86.14285714285714,
+      "post_total_starts": 2420,
+      "post_daily_starts": 86.42857142857143
+    },
+    {
+      "station_id": "SIM0085",
+      "treated": false,
+      "baseline_daily_starts": 49.285714285714285,
+      "post_total_starts": 1309,
+      "post_daily_starts": 46.75
+    },
+    {
+      "station_id": "SIM0086",
+      "treated": true,
+      "baseline_daily_starts": 59.5,
+      "post_total_starts": 1776,
+      "post_daily_starts": 63.42857142857143
+    },
+    {
+      "station_id": "SIM0087",
+      "treated": false,
+      "baseline_daily_starts": 69.64285714285714,
+      "post_total_starts": 1973,
+      "post_daily_starts": 70.46428571428571
+    },
+    {
+      "station_id": "SIM0088",
+      "treated": false,
+      "baseline_daily_starts": 56.57142857142857,
+      "post_total_starts": 1595,
+      "post_daily_starts": 56.964285714285715
+    },
+    {
+      "station_id": "SIM0089",
+      "treated": true,
+      "baseline_daily_starts": 99.25,
+      "post_total_starts": 2838,
+      "post_daily_starts": 101.35714285714286
+    },
+    {
+      "station_id": "SIM0090",
+      "treated": false,
+      "baseline_daily_starts": 90.71428571428571,
+      "post_total_starts": 2651,
+      "post_daily_starts": 94.67857142857143
+    },
+    {
+      "station_id": "SIM0091",
+      "treated": true,
+      "baseline_daily_starts": 39.75,
+      "post_total_starts": 1163,
+      "post_daily_starts": 41.535714285714285
+    },
+    {
+      "station_id": "SIM0092",
+      "treated": true,
+      "baseline_daily_starts": 40.714285714285715,
+      "post_total_starts": 1258,
+      "post_daily_starts": 44.92857142857143
+    },
+    {
+      "station_id": "SIM0093",
+      "treated": false,
+      "baseline_daily_starts": 47.5,
+      "post_total_starts": 1312,
+      "post_daily_starts": 46.857142857142854
+    },
+    {
+      "station_id": "SIM0094",
+      "treated": true,
+      "baseline_daily_starts": 78.60714285714286,
+      "post_total_starts": 2203,
+      "post_daily_starts": 78.67857142857143
+    },
+    {
+      "station_id": "SIM0095",
+      "treated": true,
+      "baseline_daily_starts": 154.85714285714286,
+      "post_total_starts": 4302,
+      "post_daily_starts": 153.64285714285714
+    },
+    {
+      "station_id": "SIM0096",
+      "treated": false,
+      "baseline_daily_starts": 65.14285714285714,
+      "post_total_starts": 1819,
+      "post_daily_starts": 64.96428571428571
+    },
+    {
+      "station_id": "SIM0097",
+      "treated": true,
+      "baseline_daily_starts": 79.82142857142857,
+      "post_total_starts": 2429,
+      "post_daily_starts": 86.75
+    },
+    {
+      "station_id": "SIM0098",
+      "treated": false,
+      "baseline_daily_starts": 52.857142857142854,
+      "post_total_starts": 1464,
+      "post_daily_starts": 52.285714285714285
+    },
+    {
+      "station_id": "SIM0099",
+      "treated": true,
+      "baseline_daily_starts": 50.035714285714285,
+      "post_total_starts": 1553,
+      "post_daily_starts": 55.464285714285715
+    }
+  ],
+  "runtime": {
+    "python": "3.14.7",
+    "numpy": "2.5.3",
+    "scipy": "1.18.1"
+  },
+  "simulation_checks": [
+    {
+      "cuped_rejection_ci": [
+        0.02777225455200653,
+        0.09627764443391289
+      ],
+      "cuped_coverage_ci": [
+        0.9037223555660872,
+        0.9722277454479934
+      ],
+      "true_effect": 0.0,
+      "replicates": 200,
+      "raw_rejection_rate": 0.04,
+      "cuped_rejection_rate": 0.055,
+      "cuped_ci_coverage": 0.945,
+      "cuped_mean_estimate": 0.03585463483229532,
+      "raw_mean_estimate": -0.036128571428571093,
+      "rejection_rate_mc_se": 0.016120638945153507
+    },
+    {
+      "cuped_rejection_ci": [
+        0.9817246596448638,
+        1.0
+      ],
+      "cuped_coverage_ci": [
+        0.9037223555660872,
+        0.9722277454479934
+      ],
+      "true_effect": 3.0,
+      "replicates": 200,
+      "raw_rejection_rate": 0.085,
+      "cuped_rejection_rate": 1.0,
+      "cuped_ci_coverage": 0.945,
+      "cuped_mean_estimate": 3.0358546348322957,
+      "raw_mean_estimate": 2.963871428571429,
+      "rejection_rate_mc_se": 0.0
+    }
+  ]
+}

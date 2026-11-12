@@ -79,11 +79,19 @@ async def render(port):
         results = [pa.ipc.open_stream(e.dataframe.arrow_data.data).read_all().to_pylist()
                    for e in executed if e.HasField("dataframe")]
         assert any(result == [{"starts": 1998}] for result in results)
+        experiment = await rerun(navigation, "ExperimentLab & Methodology")
+        assert any(e.HasField("heading") and e.heading.body == "ExperimentLab & Methodology" for e in experiment)
+        metrics = {e.metric.label: e.metric.body for e in experiment if e.HasField("metric")}
+        assert metrics["Effect (starts / station / day)"] == "+2.7531"
+        assert metrics["95% Welch confidence interval"] == "[1.7190, 3.7871]"
+        assert metrics["Two-sided p-value"] == "8.03e-07"
+        assert sum(e.HasField("plotly_chart") for e in experiment) == 3
         assert theme_verified
         return {"overview_rendered": True, "model_comparison_rendered": True,
                 "forecast_explorer_rendered": True, "saved_forecast_points": 24,
                 "tft_band_rendered": True, "plotly_charts_per_comparison_workspace": 2,
                 "sqlpilot_rendered": True, "real_curated_sql_starts": 1998,
+                "experimentlab_rendered": True, "saved_cuped_metrics_verified": True,
                 "native_light_dark_theme_config_verified": True}
 
 

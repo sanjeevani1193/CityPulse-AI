@@ -1,0 +1,27 @@
+{
+  "format_version": "citypulse-experiment-studio-v1",
+  "limitations": "Earlier calibration-period unit records and original implementation hashes are absent from this JSON. Frozen theta/SD/fit scope and saved runtime/seeds are preserved; their original fit is not reconstructed.",
+  "outputs": {
+    "experiment.json": {
+      "sha256": "fefe5b941ed2a7618b221cf51db9a3c7fccc195cb36ac0016f5fac01135ba527",
+      "size_bytes": 23654
+    }
+  },
+  "sources": {
+    "docs/experimentlab_report.html": {
+      "sha256": "fd6cf75c44b7237b76589ba01800807ac234c9a62cd4d6eaf641bf40b8c1ce4b",
+      "size_bytes": 18145
+    },
+    "outputs/experimentlab/release-20261030-final/checksums.json": {
+      "sha256": "7bbe786be6b977b9e1d0db8b40bae3530bc26106d696060695ce13f96b91757a",
+      "size_bytes": 176
+    },
+    "outputs/experimentlab/release-20261030-final/experiment.json": {
+      "sha256": "fefe5b941ed2a7618b221cf51db9a3c7fccc195cb36ac0016f5fac01135ba527",
+      "size_bytes": 23654
+    }
+  },
+  "synthetic_stations": 100,
+  "transformation": "Byte-identical copy of the existing fully synthetic experiment.json. No simulation rerun, coefficient refit or historical observations.",
+  "verification": "Canonical checksum manifest and committed HTML match; saved unit records independently reproduce effect/SE/df algebra. P-values/CIs and planning are preserved, not recalculated at app runtime."
+}
